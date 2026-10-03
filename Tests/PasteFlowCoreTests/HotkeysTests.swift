@@ -2,35 +2,78 @@ import XCTest
 @testable import PasteFlowCore
 
 final class HotkeysTests: XCTestCase {
-    func testPasteFamily() {
+    private let map = HotkeyMap()
+
+    func testDefaultsMatchPlan() {
         let v = Hotkeys.keyV
-        XCTAssertEqual(Hotkeys.action(keyCode: v, modifiers: [.command, .shift]), .sequential)
-        XCTAssertEqual(Hotkeys.action(keyCode: v, modifiers: [.command, .shift, .option]), .sequentialAll)
-        XCTAssertEqual(Hotkeys.action(keyCode: v, modifiers: [.command, .control]), .path)
-        XCTAssertEqual(Hotkeys.action(keyCode: v, modifiers: [.command, .control, .option]), .pathAll)
-        XCTAssertEqual(Hotkeys.action(keyCode: v, modifiers: [.command]), .plainPaste)
+        XCTAssertEqual(map.action(keyCode: v, modifiers: [.command, .shift]), .sequential)
+        XCTAssertEqual(map.action(keyCode: v, modifiers: [.command, .shift, .option]), .sequentialAll)
+        XCTAssertEqual(map.action(keyCode: v, modifiers: [.command, .control]), .path)
+        XCTAssertEqual(map.action(keyCode: v, modifiers: [.command, .control, .option]), .pathAll)
+        XCTAssertEqual(map.action(keyCode: 49, modifiers: [.option]), .panel)
+        XCTAssertEqual(map.action(keyCode: 19, modifiers: [.command, .shift]), .capture)
+        XCTAssertEqual(map.action(keyCode: 18, modifiers: [.command, .shift]), .pin)
+        XCTAssertEqual(map.action(keyCode: 14, modifiers: [.command, .shift]), .ocr)
+        XCTAssertEqual(HotkeyAction.sequentialAll.pasteAction, .sequentialAll)
+        XCTAssertEqual(HotkeyAction.ocr.screenAction, .ocr)
+        XCTAssertNil(HotkeyAction.panel.pasteAction)
     }
 
-    func testPanelToggle() {
-        XCTAssertTrue(Hotkeys.isPanelToggle(keyCode: Hotkeys.keySpace, modifiers: [.option]))
-        XCTAssertFalse(Hotkeys.isPanelToggle(keyCode: Hotkeys.keySpace, modifiers: [.command]))   // Spotlight
-        XCTAssertFalse(Hotkeys.isPanelToggle(keyCode: Hotkeys.keySpace, modifiers: [.control]))   // 한/영 전환
-        XCTAssertFalse(Hotkeys.isPanelToggle(keyCode: Hotkeys.keySpace, modifiers: [.option, .shift]))
-    }
-
-    func testScreenActions() {
-        XCTAssertEqual(Hotkeys.screenAction(keyCode: Hotkeys.key2, modifiers: [.command, .shift]), .capture)
-        XCTAssertEqual(Hotkeys.screenAction(keyCode: Hotkeys.key1, modifiers: [.command, .shift]), .pin)
-        XCTAssertEqual(Hotkeys.screenAction(keyCode: Hotkeys.keyE, modifiers: [.command, .shift]), .ocr)
-        XCTAssertNil(Hotkeys.screenAction(keyCode: 20, modifiers: [.command, .shift]))          // ⌘⇧3 = 맥 스크린샷
-        XCTAssertNil(Hotkeys.screenAction(keyCode: Hotkeys.key2, modifiers: [.command]))
+    func testPlainPasteIsFixed() {
+        XCTAssertTrue(Hotkeys.isPlainPaste(keyCode: Hotkeys.keyV, modifiers: [.command]))
+        XCTAssertFalse(Hotkeys.isPlainPaste(keyCode: Hotkeys.keyV, modifiers: [.command, .shift]))
+        XCTAssertNil(map.action(keyCode: Hotkeys.keyV, modifiers: [.command]))
     }
 
     func testOtherCombosIgnored() {
-        XCTAssertNil(Hotkeys.action(keyCode: Hotkeys.keyV, modifiers: []))
-        XCTAssertNil(Hotkeys.action(keyCode: Hotkeys.keyV, modifiers: [.command, .option]))  // Finder "이동" 붙여넣기
-        XCTAssertNil(Hotkeys.action(keyCode: Hotkeys.keyV, modifiers: [.shift]))
-        XCTAssertNil(Hotkeys.action(keyCode: 8, modifiers: [.command, .shift]))              // ⌘⇧C
+        XCTAssertNil(map.action(keyCode: Hotkeys.keyV, modifiers: []))
+        XCTAssertNil(map.action(keyCode: Hotkeys.keyV, modifiers: [.command, .option]))  // Finder "이동" 붙여넣기
+        XCTAssertNil(map.action(keyCode: 8, modifiers: [.command, .shift]))              // ⌘⇧C
+        XCTAssertNil(map.action(keyCode: 20, modifiers: [.command, .shift]))             // ⌘⇧3 = 맥 스크린샷
+        XCTAssertNil(map.action(keyCode: 49, modifiers: [.command]))                     // Spotlight
+        XCTAssertNil(map.action(keyCode: 49, modifiers: [.option, .shift]))
+    }
+
+    func testChangeTakesOverAndOldKeyStopsWorking() {
+        var m = HotkeyMap()
+        m.set(Hotkey(15, [.command, .option]), for: .capture)     // ⌥⌘R
+        XCTAssertEqual(m.action(keyCode: 15, modifiers: [.command, .option]), .capture)
+        XCTAssertNil(m.action(keyCode: 19, modifiers: [.command, .shift]))
+        XCTAssertFalse(m.isDefault(.capture))
+        m.set(nil, for: .capture)
+        XCTAssertTrue(m.isDefault(.capture))
+        XCTAssertEqual(m.action(keyCode: 19, modifiers: [.command, .shift]), .capture)
+    }
+
+    func testJSONRoundTripKeepsOnlyChanges() {
+        var m = HotkeyMap()
+        m.set(Hotkey(35, [.control, .option]), for: .pin)
+        let json = m.json()
+        XCTAssertTrue(json.contains("pin"))
+        XCTAssertFalse(json.contains("ocr"))
+        XCTAssertEqual(HotkeyMap.from(json: json), m)
+        XCTAssertEqual(HotkeyMap.from(json: "깨짐"), HotkeyMap())
+        XCTAssertEqual(HotkeyMap.from(json: #"{"없는동작":{"keyCode":1,"modifiers":1}}"#), HotkeyMap())
+    }
+
+    func testProblems() {
+        XCTAssertEqual(map.problem(Hotkey(0, []), for: .pin), .needsModifier)
+        XCTAssertEqual(map.problem(Hotkey(0, [.shift]), for: .pin), .needsModifier)
+        if case .reserved = map.problem(Hotkey(9, [.command]), for: .pin) {} else { XCTFail("⌘V는 예약") }
+        if case .reserved = map.problem(Hotkey(49, [.control]), for: .panel) {} else { XCTFail("⌃Space는 한/영") }
+        XCTAssertEqual(map.problem(Hotkey(19, [.command, .shift]), for: .pin), .duplicate(.capture))
+        XCTAssertNil(map.problem(Hotkey(18, [.command, .shift]), for: .pin))   // 자기 키는 그대로 둬도 됨
+        XCTAssertNil(map.problem(Hotkey(15, [.command, .option]), for: .pin))
+        XCTAssertNotNil(HotkeyMap.warning(Hotkey(1, [.command, .shift])))     // ⌘⇧S
+        XCTAssertNil(HotkeyMap.warning(Hotkey(15, [.command, .option])))
+    }
+
+    func testDisplay() {
+        XCTAssertEqual(Hotkey(9, [.command, .shift, .option]).display, "⌥⇧⌘V")
+        XCTAssertEqual(Hotkey(9, [.command, .control, .option]).display, "⌃⌥⌘V")
+        XCTAssertEqual(Hotkey(49, [.option]).display, "⌥Space")
+        XCTAssertTrue(KeyNames.isModifierKey(56))
+        XCTAssertFalse(KeyNames.isModifierKey(9))
     }
 }
 

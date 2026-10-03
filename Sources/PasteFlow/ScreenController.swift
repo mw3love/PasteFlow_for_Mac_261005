@@ -49,7 +49,7 @@ final class ScreenController {
             Toast.show("캡처됨", detail: url.lastPathComponent)
         } catch {
             StatusLog.append("capture save FAILED: \(error)")
-            Toast.show("캡처됨", detail: "파일 저장 실패 — 클립보드에는 있어요")
+            Toast.show("캡처됨", detail: "파일 저장 실패 — 클립보드에는 있어요", always: true)
         }
     }
 
@@ -57,11 +57,11 @@ final class ScreenController {
 
     private func recognize(_ png: Data) {
         guard let key = OCRSettings.apiKey else {
-            Toast.show("OCR 실패", detail: GatewayOCR.Failure.missingKey.description, duration: 3)
+            Toast.show("OCR 실패", detail: GatewayOCR.Failure.missingKey.description, duration: 3, always: true)
             return
         }
         let base = OCRSettings.baseURL(db), model = OCRSettings.model(db)
-        Toast.show("글자 읽는 중…", detail: model, duration: 60)
+        Toast.show("글자 읽는 중…", detail: model, duration: 60, key: "ocr", always: true)
         let t0 = Date()
         Task { @MainActor in
             let (result, used) = await GatewayOCR.recognize(png: png, baseURL: base, apiKey: key, model: model,
@@ -75,12 +75,12 @@ final class ScreenController {
                 pb.setString(text, forType: .string)
                 StatusLog.append("ocr ok model=\(used) chars=\(text.count) ms=\(ms)")
                 let first = text.split(separator: "\n").first.map(String.init) ?? text
-                Toast.show(used == model ? "OCR 완료" : "OCR 완료 (\(used)로 대체)", detail: String(first.prefix(60)), duration: 2.5)
+                Toast.show(used == model ? "OCR 완료" : "OCR 완료 (\(used)로 대체)", detail: String(first.prefix(60)), duration: 2.5, key: "ocr", always: true)
                 try? await OCRSettings.refreshCredits(self.db, key: key)   // 메뉴에 보일 크레딧 갱신
             case .failure(let f):
                 StatusLog.append("ocr FAILED model=\(used) ms=\(ms) reason=\(f)")
                 let hint = f.shouldFallback ? " — OCR 설정에서 새로고침 후 모델을 고르세요" : ""
-                Toast.show("OCR 실패", detail: f.description + hint, duration: 4)
+                Toast.show("OCR 실패", detail: f.description + hint, duration: 4, key: "ocr", always: true)
             }
         }
     }
@@ -123,7 +123,7 @@ final class ScreenController {
             pinText(s)
             return
         }
-        Toast.show("핀할 내용이 없어요", detail: "큐와 클립보드가 비어 있어요")
+        Toast.show("핀할 내용이 없어요", detail: "큐와 클립보드가 비어 있어요", always: true)
     }
 
     private func show(_ img: NSImage, png: Data?) {

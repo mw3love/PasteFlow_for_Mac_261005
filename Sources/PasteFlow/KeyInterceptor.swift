@@ -10,6 +10,10 @@ final class KeyInterceptor {
     var onAction: ((PasteAction) -> Void)?
     var onPanelToggle: (() -> Void)?
     var onScreenAction: ((ScreenAction) -> Void)?
+    /// 지금 쓰는 단축키 표(설정창에서 바꾸면 바로 갈아 끼운다). 탭 콜백은 메인 런루프에서 돈다.
+    var map = HotkeyMap()
+    /// 설정창 키 녹화 중 — 단축키를 가로채지 않고 그대로 흘려보낸다.
+    var isRecording = false
 
     private var tap: CFMachPort?
     private var swallowedKeyUp: Int64?
@@ -56,31 +60,26 @@ final class KeyInterceptor {
             return Unmanaged.passUnretained(event)
         }
         let mods = Self.modifiers(event.flags)
-        if Hotkeys.isPanelToggle(keyCode: Int(keyCode), modifiers: mods) {
-            swallowedKeyUp = keyCode
-            if event.getIntegerValueField(.keyboardEventAutorepeat) == 0 {
-                DispatchQueue.main.async { self.onPanelToggle?() }
-            }
-            return nil
-        }
-        if let screen = Hotkeys.screenAction(keyCode: Int(keyCode), modifiers: mods) {
-            swallowedKeyUp = keyCode
-            if event.getIntegerValueField(.keyboardEventAutorepeat) == 0 {
-                DispatchQueue.main.async { self.onScreenAction?(screen) }
-            }
-            return nil
-        }
-        guard let action = Hotkeys.action(keyCode: Int(keyCode), modifiers: mods) else {
+        // 설정창에서 새 단축키를 녹화하는 중이면 아무것도 가로채지 않는다
+        if isRecording { return Unmanaged.passUnretained(event) }
+        if Hotkeys.isPlainPaste(keyCode: Int(keyCode), modifiers: mods) {
+            DispatchQueue.main.async { self.onAction?(.plainPaste) }
             return Unmanaged.passUnretained(event)
         }
-        if action == .plainPaste {
-            DispatchQueue.main.async { self.onAction?(.plainPaste) }
+        guard let action = map.action(keyCode: Int(keyCode), modifiers: mods) else {
             return Unmanaged.passUnretained(event)
         }
         swallowedKeyUp = keyCode
         // 키를 누르고 있어 반복 입력이 오면 삼키기만 한다
-        if event.getIntegerValueField(.keyboardEventAutorepeat) == 0 {
-            DispatchQueue.main.async { self.onAction?(action) }
+        guard event.getIntegerValueField(.keyboardEventAutorepeat) == 0 else { return nil }
+        DispatchQueue.main.async {
+            if let paste = action.pasteAction {
+                self.onAction?(paste)
+            } else if let screen = action.screenAction {
+                self.onScreenAction?(screen)
+            } else {
+                self.onPanelToggle?()
+            }
         }
         return nil
     }

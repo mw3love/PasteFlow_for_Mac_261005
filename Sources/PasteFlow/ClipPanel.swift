@@ -330,9 +330,9 @@ final class ClipPanelController: NSObject {
         m.addItem(MenuAction("패널 숨기기") { [weak self] in self?.hide() })
         m.addItem(MenuAction("히스토리 초기화") { [weak self] in self?.confirmClearHistory() })
         m.addItem(.separator())
-        m.addItem(MenuAction("OCR 설정…") { [weak self] in
+        m.addItem(MenuAction("설정…") { [weak self] in
             self?.hide()
-            OCRSettingsWindow.show(db: self?.db)
+            SettingsWindow.show()
         })
         m.addItem(.separator())
         m.addItem(MenuAction("PasteFlow 종료") { NSApp.terminate(nil) })

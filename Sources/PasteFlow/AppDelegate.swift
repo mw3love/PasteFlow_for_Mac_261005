@@ -2,6 +2,7 @@ import AppKit
 import PasteFlowCore
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
+    private static let reopenNote = Notification.Name("com.minwoo.pasteflow.reopen")
     private var statusItem: NSStatusItem!
     private let menu = NSMenu()
     private var db: ClipDatabase!
@@ -14,6 +15,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var screen: ScreenController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // 한 번만 실행: 이미 떠 있으면 그쪽에 설정창을 열라고 알리고 이쪽은 끝낸다
+        let others = NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "")
+            .filter { $0 != NSRunningApplication.current }
+        if !others.isEmpty {
+            DistributedNotificationCenter.default().postNotificationName(Self.reopenNote, object: nil, userInfo: nil, deliverImmediately: true)
+            StatusLog.append("second instance — handed over to pid=\(others[0].processIdentifier) and quit")
+            NSApp.terminate(nil)
+            return
+        }
+        DistributedNotificationCenter.default().addObserver(forName: Self.reopenNote, object: nil, queue: .main) { _ in
+            SettingsWindow.show()
+        }
         // 자리 값이 없으면 맥이 새 아이콘을 맨 왼쪽(Hidden Bar 숨김 구역)에 둔다 → 첫 실행에 오른쪽 자리를 정해 둔다.
         // 값은 메뉴바 오른쪽 끝에서의 거리. Hidden Bar 화살표(385)보다 작으면 늘 보이는 구역이다.
         let positionKey = "NSStatusItem Preferred Position PasteFlowMain"
@@ -53,6 +66,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         AnnotationCanvas.settingsDB = db   // 주석 도구별 색·크기 기억
         screen = ScreenController(paste: paste, db: db)
         keys.onScreenAction = { [weak self] action in self?.screen?.handle(action) }
+        SettingsWindow.configure(db: db, keys: keys, queue: queue)   // 저장된 단축키·알림·큐 시간
         let ok = keys.start()
         StatusLog.append("key tap \(ok ? "started" : "FAILED (손쉬운 사용 권한 필요)") tempCleanup=\(removed)")
     }
@@ -64,9 +78,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 .appendingPathComponent("PasteFlow")
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             db = try ClipDatabase(path: dir.appendingPathComponent("pasteflow.db").path)
-            if let v = try db.setting("queue_idle_reset_sec"), let sec = TimeInterval(v) {
-                queue.idleResetSec = sec
-            }
         } catch {
             StatusLog.append("DB 열기 실패: \(error)")
             return
@@ -93,10 +104,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let s = PermissionStatus.current()
         menu.addItem(withTitle: "PasteFlow", action: nil, keyEquivalent: "")
         menu.addItem(.separator())
-        let open = menu.addItem(withTitle: "패널 열기", action: #selector(openPanel), keyEquivalent: " ")
-        open.keyEquivalentModifierMask = [.option]
-        open.target = self
-        menu.addItem(withTitle: "OCR 설정…", action: #selector(openOCRSettings), keyEquivalent: "").target = self
+        // 단축키는 설정에서 바뀔 수 있어 제목 옆에 글자로 보여준다(메뉴 단축키는 전역으로 동작하지 않음)
+        menu.addItem(withTitle: "패널 열기  \(keys.map.hotkey(for: .panel).display)", action: #selector(openPanel), keyEquivalent: "").target = self
+        menu.addItem(withTitle: "설정…", action: #selector(openSettings), keyEquivalent: ",").target = self
         // 메뉴를 열 때는 네트워크·비밀값을 건드리지 않는다(메뉴가 키보드를 잡고 있어 뜬 창에 입력이 안 됨) — 마지막 값만
         menu.addItem(withTitle: OCRSettings.cachedCredits(db) ?? "크레딧: OCR 설정에서 확인", action: nil, keyEquivalent: "")
         menu.addItem(.separator())
@@ -111,7 +121,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func openPanel() { panel?.show() }
 
-    @objc private func openOCRSettings() { OCRSettingsWindow.show(db: db) }
+    @objc private func openSettings() { SettingsWindow.show() }
+
+    /// Finder·Spotlight에서 이미 실행 중인 앱을 다시 열면 설정창을 띄운다(메뉴바 아이콘이 숨어 있어도 찾을 수 있게).
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        SettingsWindow.show()
+        return false
+    }
 
     @objc private func openPrivacySettings() {
         let s = PermissionStatus.current()

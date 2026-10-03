@@ -122,7 +122,7 @@ final class PinWindow: NSPanel {
     private func copyResult() {
         canvas.commitText()
         guard let png = AnnotationRenderer.renderPNG(image: canvas.image, items: canvas.doc.items) else {
-            Toast.show("복사 실패", detail: "이미지를 만들지 못했어요")
+            Toast.show("복사 실패", detail: "이미지를 만들지 못했어요", always: true)
             return
         }
         let pb = NSPasteboard.general

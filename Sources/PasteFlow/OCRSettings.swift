@@ -66,18 +66,8 @@ enum OCRSettings {
     }
 }
 
-/// OCR 설정 창(임시 — 9단계 설정창의 OCR 칸으로 옮길 예정). 모달이 아니라서 새로고침·테스트가 창을 막지 않는다.
-final class OCRSettingsWindow: NSWindowController, NSWindowDelegate {
-    private static var shared: OCRSettingsWindow?
-
-    static func show(db: ClipDatabase?) {
-        if shared == nil { shared = OCRSettingsWindow(db: db) }
-        shared?.reloadFields()
-        NSApp.activate(ignoringOtherApps: true)
-        shared?.showWindow(nil)
-        shared?.window?.makeKeyAndOrderFront(nil)
-    }
-
+/// 설정창의 OCR 탭. 모달이 아니라서 새로고침·테스트가 창을 막지 않는다.
+final class OCRSettingsPane: NSViewController {
     private let db: ClipDatabase?
     private let baseField = NSTextField()
     private let modelBox = NSComboBox()
@@ -87,16 +77,14 @@ final class OCRSettingsWindow: NSWindowController, NSWindowDelegate {
     private let modelsLabel = NSTextField(labelWithString: "")
     private let testLabel = NSTextField(labelWithString: "")
 
-    private init(db: ClipDatabase?) {
+    init(db: ClipDatabase?) {
         self.db = db
-        let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 520, height: 300), styleMask: [.titled, .closable],
-                         backing: .buffered, defer: false)
-        w.title = "OCR 설정"
-        w.isReleasedWhenClosed = false
-        super.init(window: w)
-        w.delegate = self
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    override func loadView() {
+        view = NSView()
         build()
-        w.center()
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -134,9 +122,7 @@ final class OCRSettingsWindow: NSWindowController, NSWindowDelegate {
 
         let save = button("저장", #selector(save))
         save.keyEquivalent = "\r"
-        let close = button("닫기", #selector(closeClicked))
-        close.keyEquivalent = "\u{1b}"
-        let buttons = NSStackView(views: [NSView(), close, save])
+        let buttons = NSStackView(views: [NSView(), save])
 
         let stack = NSStackView(views: [grid, buttons])
         stack.orientation = .vertical
@@ -144,19 +130,18 @@ final class OCRSettingsWindow: NSWindowController, NSWindowDelegate {
         stack.spacing = 16
         stack.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
         stack.translatesAutoresizingMaskIntoConstraints = false
-        window?.contentView = NSView()
-        window?.contentView?.addSubview(stack)
+        view.addSubview(stack)
         NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: window!.contentView!.leadingAnchor),
-            stack.trailingAnchor.constraint(equalTo: window!.contentView!.trailingAnchor),
-            stack.topAnchor.constraint(equalTo: window!.contentView!.topAnchor),
-            stack.bottomAnchor.constraint(equalTo: window!.contentView!.bottomAnchor),
+            stack.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            stack.topAnchor.constraint(equalTo: view.topAnchor),
+            stack.bottomAnchor.constraint(lessThanOrEqualTo: view.bottomAnchor),
             buttons.widthAnchor.constraint(equalTo: grid.widthAnchor),
             modelBox.widthAnchor.constraint(equalToConstant: 300),
         ])
     }
 
-    private func reloadFields() {
+    func reloadFields() {
         baseField.stringValue = OCRSettings.baseURL(db)
         let models = OCRSettings.cachedModels(db)
         modelBox.removeAllItems()
@@ -239,8 +224,7 @@ final class OCRSettingsWindow: NSWindowController, NSWindowDelegate {
             NotificationCenter.default.post(name: .pasteFlowStateChanged, object: nil)
         }
         StatusLog.append("ocr settings saved model=\(OCRSettings.model(db)) keyStored=\(OCRSettings.apiKey != nil)")
-        window?.close()
+        reloadFields()
+        Toast.show("OCR 설정 저장됨", always: true)
     }
-
-    @objc private func closeClicked() { window?.close() }
 }
