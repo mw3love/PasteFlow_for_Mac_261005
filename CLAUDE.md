@@ -23,6 +23,11 @@ scripts/build.sh --no-run  # 실행 없이 설치만
 - 서명 인증서: 로그인 키체인의 자체 서명 `PasteFlow Local Signing`(codeSigning, 2026-10-03 생성, 10년). 신뢰 설정 없이도 서명된다. 지정 요구사항 = `identifier "com.minwoo.pasteflow" and certificate leaf = H"53a1…"` → 재빌드해도 같은 앱으로 인식. **인증서를 지우거나 새로 만들면 권한을 다시 줘야 한다.**
 - 로직(Core, 테스트 있음): `PasteQueue`(순차 큐 — 윈도우판 규칙 그대로), `ClipDatabase`(SQLite, 시스템 `SQLite3` 모듈 — 외부 패키지 없음), `ClipItem`(원본 형식을 type→Data로 전부 보존), `ClipClassifier`(종류·미리보기·비밀번호 관리자 표시 형식 건너뛰기).
 - 앱: `ClipboardMonitor`는 `NSPasteboard.changeCount`를 0.25초마다 확인(맥은 변경 알림이 없음). 실측 CPU 0.0%. 앱이 직접 쓴 클립보드는 `noteSelfChange()`로 표시해 다시 기록하지 않는다.
+- 붙여넣기: `KeyInterceptor`(CGEventTap, 키 코드 V=9로 판정 → 한글 입력 중에도 동작, `tapDisabledByTimeout` 시 다시 켬) → `PasteController`(큐에서 꺼내 클립보드에 원본 형식 그대로 쓰고 50ms 뒤 ⌘V 주입, 전체 자동은 300ms 간격, 경로 붙여넣기는 `$TMPDIR/PasteFlow/*.png` — 24시간 지난 파일은 시작 시 정리) → `PasteHUD`(포커스 안 뺏는 NSPanel, 전체 화면 앱 위에도 뜸, 소진 1.2초 뒤 fade).
+  - **주입한 ⌘V 구분**: 주입 이벤트의 `eventSourceUserData`에 표식(`KeyInterceptor.injectedMarker`)을 붙이고, 탭에서 표식 없는 ⌘V만 "사용자가 누른 일반 ⌘V"로 보고 큐를 비운다. 주입 ⌘V는 플래그를 ⌘만으로 고정해 사용자가 ⇧·⌥·⌃를 누르고 있어도 앱에는 ⌘V로 보인다.
+  - 큐 비우기 공통 경로: 일반 ⌘V·HUD ✕·소진 완료 모두 `PasteController`에서 처리.
+  - 2026-10-03 실조건검증(사용자가 TextEdit·터미널에서 직접): 순차 순서, 일반 ⌘V로 큐 비움, `⌃⌘V` 이미지 경로 모두 정상. Karabiner(선택 프로필에 재매핑 규칙 없음)와 충돌 없음.
+- 자체 시험 함정: 이 맥의 사용자는 Chrome 전체 화면을 자주 띄워 두므로, 자동 키 입력 시험 중 맨 앞 창이 바뀌어 주입한 ⌘V가 엉뚱한 앱으로 갈 수 있다. 실제 붙는 결과는 사용자 직접 확인이 확실하다.
 - 데이터: `~/Library/Application Support/PasteFlow/pasteflow.db` (히스토리 50개, 고정 제외).
 - 알려진 한계: 클립보드에 항목이 여러 개면(Finder에서 파일 여러 개 복사 등) 첫 항목만 보존한다. 32MB 넘는 형식 하나는 건너뛴다.
 - 실행 기록: `~/Library/Logs/PasteFlow/status.log` — 복사마다 `copy id=… kind=… queue=p/total` 한 줄도 남는다. — 실행마다 권한 상태와 메뉴바 아이콘 위치를 남긴다. 2026-10-03 재빌드 3회 이상에서 두 권한 모두 유지 확인.

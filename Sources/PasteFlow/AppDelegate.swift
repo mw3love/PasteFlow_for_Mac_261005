@@ -7,6 +7,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var db: ClipDatabase!
     private let queue = PasteQueue()
     private let monitor = ClipboardMonitor()
+    private let keys = KeyInterceptor()
+    private let hud = PasteHUD()
+    private var paste: PasteController!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -25,6 +28,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             PermissionStatus.requestMissing()
         }
         startClipboard()
+        startPaste()
+    }
+
+    // 붙여넣기 단축키 → 큐에서 꺼내 주입 + 진행 HUD
+    private func startPaste() {
+        let tempStore = TempImageStore(directory: FileManager.default.temporaryDirectory.appendingPathComponent("PasteFlow"))
+        let removed = tempStore.cleanup()
+        paste = PasteController(queue: queue, monitor: monitor, hud: hud, tempStore: tempStore)
+        keys.onAction = { [weak self] action in self?.paste.handle(action) }
+        let ok = keys.start()
+        StatusLog.append("key tap \(ok ? "started" : "FAILED (손쉬운 사용 권한 필요)") tempCleanup=\(removed)")
     }
 
     // 클립보드 감시 → DB 저장 → 순차 큐
@@ -47,6 +61,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 var saved = item
                 saved.id = try self.db.insert(item)
                 self.queue.add(saved)
+                self.paste?.didCopy()
                 let q = self.queue.status
                 StatusLog.append("copy id=\(saved.id!) kind=\(item.kind.rawValue) formats=\(item.formats.count) queue=\(q.pointer)/\(q.total) preview=\(item.previewText.prefix(40).replacingOccurrences(of: "\n", with: " "))")
             } catch {
