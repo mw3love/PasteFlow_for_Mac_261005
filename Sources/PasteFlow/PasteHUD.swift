@@ -15,15 +15,6 @@ final class PasteHUD {
     private let rows = NSStackView()
     private var finishWork: DispatchWorkItem?
 
-    private enum Theme {
-        static let bg = NSColor(srgbRed: 0x16 / 255, green: 0x16 / 255, blue: 0x18 / 255, alpha: 1)
-        static let text = NSColor(srgbRed: 0xec / 255, green: 0xec / 255, blue: 0xec / 255, alpha: 1)
-        static let text2 = NSColor(srgbRed: 0xcf / 255, green: 0xcf / 255, blue: 0xd2 / 255, alpha: 1)
-        static let dim = NSColor(srgbRed: 0x6e / 255, green: 0x6e / 255, blue: 0x73 / 255, alpha: 1)
-        static let secondary = NSColor(srgbRed: 0x98 / 255, green: 0x98 / 255, blue: 0x9d / 255, alpha: 1)
-        static let coral = NSColor(srgbRed: 0xfa / 255, green: 0xb3 / 255, blue: 0x87 / 255, alpha: 1)
-    }
-
     init() {
         panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: Self.width, height: 80),
                         styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: true)
@@ -39,9 +30,9 @@ final class PasteHUD {
         let box = NSView()
         box.wantsLayer = true
         box.layer?.backgroundColor = Theme.bg.cgColor
-        box.layer?.cornerRadius = 12
+        box.layer?.cornerRadius = Theme.windowRadius
         box.layer?.borderWidth = 0.5
-        box.layer?.borderColor = NSColor(white: 1, alpha: 0.16).cgColor
+        box.layer?.borderColor = Theme.border.cgColor
         panel.contentView = box
 
         titleLabel.font = .systemFont(ofSize: 13, weight: .semibold)

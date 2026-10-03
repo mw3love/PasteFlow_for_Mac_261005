@@ -23,6 +23,14 @@ public enum Hotkeys {
     /// ANSI 배열 V 키의 가상 키 코드(kVK_ANSI_V).
     public static let keyV: Int = 9
 
+    /// Space 키의 가상 키 코드(kVK_Space).
+    public static let keySpace: Int = 49
+
+    /// 패널 열기/닫기 — ⌥Space.
+    public static func isPanelToggle(keyCode: Int, modifiers: Modifiers) -> Bool {
+        keyCode == keySpace && modifiers == [.option]
+    }
+
     public static func action(keyCode: Int, modifiers: Modifiers) -> PasteAction? {
         guard keyCode == keyV else { return nil }
         switch modifiers {

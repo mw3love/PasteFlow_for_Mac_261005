@@ -1,6 +1,11 @@
 import AppKit
 import PasteFlowCore
 
+extension Notification.Name {
+    /// 히스토리·큐 상태가 바뀜 — 패널이 듣고 다시 그린다.
+    static let pasteFlowStateChanged = Notification.Name("PasteFlowStateChanged")
+}
+
 /// 큐에서 항목을 꺼내 클립보드에 쓰고 ⌘V를 주입한다. 순차·전체·경로 붙여넣기와 큐 비우기를 한곳에서 다룬다.
 final class PasteController {
     /// 전체 자동 붙여넣기 간격(윈도우판과 동일).
@@ -39,6 +44,43 @@ final class PasteController {
         bulkTimer?.invalidate()
         bulkTimer = nil
         hud.dismiss()
+        notifyChanged()
+    }
+
+    /// 패널에서 고른 항목 하나를 바로 붙여넣는다(큐와 무관). `asPath`면 이미지를 임시 PNG 경로로.
+    func pasteItem(_ item: ClipItem, asPath: Bool = false) {
+        write(item, asPath: asPath)
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.injectDelay) {
+            KeyInterceptor.injectCommandV()
+        }
+        StatusLog.append("paste from panel id=\(item.id ?? 0) asPath=\(asPath)")
+    }
+
+    /// 클립보드에만 올린다(붙여넣기 없이).
+    func copyToClipboard(_ item: ClipItem, asPath: Bool = false) {
+        write(item, asPath: asPath)
+    }
+
+    /// 이미지 항목을 임시 PNG로 저장하고 경로를 돌려준다(끌어다 놓기·경로 복사용).
+    func tempPNGPath(for item: ClipItem) -> URL? {
+        guard item.kind == .image, let png = Self.pngData(item) else { return nil }
+        return try? tempStore.save(png: png, itemId: item.id)
+    }
+
+    /// 히스토리에서 지운 항목을 큐에서도 빼고 HUD를 맞춘다.
+    func removeFromQueue(id: Int64) {
+        guard queue.remove(id: id) else { return }
+        let s = queue.status
+        if s.total == 0 {
+            hud.dismiss()
+        } else if hud.isVisible {
+            hud.show(items: queue.items, pointer: s.pointer)
+        }
+        notifyChanged()
+    }
+
+    func notifyChanged() {
+        NotificationCenter.default.post(name: .pasteFlowStateChanged, object: nil)
     }
 
     // MARK: 내부
@@ -54,6 +96,7 @@ final class PasteController {
         StatusLog.append("paste id=\(item.id ?? 0) asPath=\(asPath) queue=\(s.pointer)/\(s.total)")
         hud.show(items: queue.items, pointer: s.pointer)
         if queue.isExhausted { finish() }
+        notifyChanged()
         return true
     }
 
@@ -78,13 +121,14 @@ final class PasteController {
         bulkTimer = nil
         queue.clear()
         hud.dismiss()
+        notifyChanged()
         StatusLog.append("queue cleared (\(reason))")
     }
 
     private func write(_ item: ClipItem, asPath: Bool) {
         let pb = NSPasteboard.general
         pb.clearContents()
-        if asPath, item.kind == .image, let png = Self.pngData(item), let url = try? tempStore.save(png: png, itemId: item.id) {
+        if asPath, let url = tempPNGPath(for: item) {
             pb.setString(url.path, forType: .string)
         } else {
             let pbItem = NSPasteboardItem()

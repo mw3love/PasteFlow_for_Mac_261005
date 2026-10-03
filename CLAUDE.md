@@ -27,6 +27,11 @@ scripts/build.sh --no-run  # 실행 없이 설치만
   - **주입한 ⌘V 구분**: 주입 이벤트의 `eventSourceUserData`에 표식(`KeyInterceptor.injectedMarker`)을 붙이고, 탭에서 표식 없는 ⌘V만 "사용자가 누른 일반 ⌘V"로 보고 큐를 비운다. 주입 ⌘V는 플래그를 ⌘만으로 고정해 사용자가 ⇧·⌥·⌃를 누르고 있어도 앱에는 ⌘V로 보인다.
   - 큐 비우기 공통 경로: 일반 ⌘V·HUD ✕·소진 완료 모두 `PasteController`에서 처리.
   - 2026-10-03 실조건검증(사용자가 TextEdit·터미널에서 직접): 순차 순서, 일반 ⌘V로 큐 비움, `⌃⌘V` 이미지 경로 모두 정상. Karabiner(선택 프로필에 재매핑 규칙 없음)와 충돌 없음.
+- 패널(`ClipPanel.swift`, AppKit — `⌥` 드래그 판정·키 처리를 직접 다루려고 SwiftUI 대신 선택): `⌥Space` 토글, 다른 앱을 활성화하지 않는 NSPanel이지만 키 입력은 받음(그래서 Enter 붙여넣기가 원래 앱으로 감). 키: ↑↓ 선택, Enter 붙여넣기(⌥Enter=경로), Space/더블클릭 미리보기, P 고정, ⌫ 삭제(큐 동기화), ⌘C 복사, Esc 닫기. 목록은 `withFormats: false`로 원본 없이 읽고, 필요할 때만 `db.item(id:)`.
+  - 함정 1: 목록을 다시 그린 직후 `scrollToVisible`을 부르면 배치 전 위치로 계산돼 맨 아래로 튄다 → `layoutSubtreeIfNeeded()` 후 스크롤, 다시 그릴 때 원래 스크롤 위치 복원.
+  - 함정 2: `isMovableByWindowBackground` 창에서 글자 칸(NSTextField)을 누르면 창 이동으로 처리된다 → 항목 뷰가 `hitTest`로 클릭을 직접 받고 `mouseDownCanMoveWindow = false`.
+  - 2026-10-03 사용자 실조건검증: 선택·고정·삭제·미리보기·Enter 붙여넣기·우클릭·끌어다 놓기(글자·이미지, ⌥ 경로) 모두 정상.
+  - 윈도우판에 있는데 아직 없는 것: 큐에 추가/해제(C), 고정 항목 드래그로 순서 바꾸기, 히스토리→고정 영역 드롭, 고정 글자 수정, 파일 위치 열기(캡처 항목 — 6단계 이후).
 - 자체 시험 함정: 이 맥의 사용자는 Chrome 전체 화면을 자주 띄워 두므로, 자동 키 입력 시험 중 맨 앞 창이 바뀌어 주입한 ⌘V가 엉뚱한 앱으로 갈 수 있다. 실제 붙는 결과는 사용자 직접 확인이 확실하다.
 - 데이터: `~/Library/Application Support/PasteFlow/pasteflow.db` (히스토리 50개, 고정 제외).
 - 알려진 한계: 클립보드에 항목이 여러 개면(Finder에서 파일 여러 개 복사 등) 첫 항목만 보존한다. 32MB 넘는 형식 하나는 건너뛴다.

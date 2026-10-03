@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let keys = KeyInterceptor()
     private let hud = PasteHUD()
     private var paste: PasteController!
+    private var panel: ClipPanelController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -37,6 +38,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let removed = tempStore.cleanup()
         paste = PasteController(queue: queue, monitor: monitor, hud: hud, tempStore: tempStore)
         keys.onAction = { [weak self] action in self?.paste.handle(action) }
+        if let db {
+            panel = ClipPanelController(db: db, queue: queue, paste: paste)
+        }
+        keys.onPanelToggle = { [weak self] in self?.panel?.toggle() }
         let ok = keys.start()
         StatusLog.append("key tap \(ok ? "started" : "FAILED (손쉬운 사용 권한 필요)") tempCleanup=\(removed)")
     }
@@ -77,13 +82,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let s = PermissionStatus.current()
         menu.addItem(withTitle: "PasteFlow", action: nil, keyEquivalent: "")
         menu.addItem(.separator())
-        // 임시 확인용(5단계 패널이 생기면 제거): 큐 상태와 최근 항목
-        let q = queue.status
-        menu.addItem(withTitle: "순차 큐: \(q.pointer)/\(q.total)", action: nil, keyEquivalent: "")
-        for item in (try? db?.recent(limit: 5)) ?? [] {
-            let title = item.previewText.replacingOccurrences(of: "\n", with: " ")
-            menu.addItem(withTitle: "· " + String(title.prefix(40)), action: nil, keyEquivalent: "")
-        }
+        let open = menu.addItem(withTitle: "패널 열기", action: #selector(openPanel), keyEquivalent: " ")
+        open.keyEquivalentModifierMask = [.option]
+        open.target = self
         menu.addItem(.separator())
         menu.addItem(withTitle: "손쉬운 사용: \(s.accessibility ? "허용됨" : "필요")", action: nil, keyEquivalent: "")
         menu.addItem(withTitle: "화면 기록: \(s.screenRecording ? "허용됨" : "필요")", action: nil, keyEquivalent: "")
@@ -93,6 +94,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(.separator())
         menu.addItem(withTitle: "종료", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
     }
+
+    @objc private func openPanel() { panel?.show() }
 
     @objc private func openPrivacySettings() {
         let s = PermissionStatus.current()

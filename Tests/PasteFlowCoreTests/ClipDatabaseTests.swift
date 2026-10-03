@@ -46,6 +46,28 @@ final class ClipDatabaseTests: XCTestCase {
         XCTAssertEqual(try db.recent().map(\.previewText), ["b"])
     }
 
+    func testListWithoutFormatsSkipsPayloadButKeepsSummary() throws {
+        let db = try ClipDatabase(path: ":memory:")
+        var item = text("big")
+        item.thumbnail = Data([9])
+        let id = try db.insert(item)
+        let light = try XCTUnwrap(db.recent(withFormats: false).first)
+        XCTAssertEqual(light.id, id)
+        XCTAssertEqual(light.previewText, "big")
+        XCTAssertEqual(light.thumbnail, Data([9]))
+        XCTAssertTrue(light.formats.isEmpty)
+        XCTAssertFalse(try XCTUnwrap(db.item(id: id)).formats.isEmpty)
+    }
+
+    func testClearHistoryKeepsPinned() throws {
+        let db = try ClipDatabase(path: ":memory:")
+        let p = try db.insert(text("pin")); try db.setPinned(id: p, true)
+        _ = try db.insert(text("h"))
+        try db.clearHistory()
+        XCTAssertTrue(try db.recent().isEmpty)
+        XCTAssertEqual(try db.pinned().count, 1)
+    }
+
     func testDelete() throws {
         let db = try ClipDatabase(path: ":memory:")
         let id = try db.insert(text("x"))

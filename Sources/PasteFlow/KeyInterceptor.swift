@@ -8,6 +8,7 @@ final class KeyInterceptor {
     static let injectedMarker: Int64 = 0x5046_4C57  // "PFLW"
 
     var onAction: ((PasteAction) -> Void)?
+    var onPanelToggle: (() -> Void)?
 
     private var tap: CFMachPort?
     private var swallowedKeyUp: Int64?
@@ -53,7 +54,15 @@ final class KeyInterceptor {
         if event.getIntegerValueField(.eventSourceUserData) == Self.injectedMarker {
             return Unmanaged.passUnretained(event)
         }
-        guard let action = Hotkeys.action(keyCode: Int(keyCode), modifiers: Self.modifiers(event.flags)) else {
+        let mods = Self.modifiers(event.flags)
+        if Hotkeys.isPanelToggle(keyCode: Int(keyCode), modifiers: mods) {
+            swallowedKeyUp = keyCode
+            if event.getIntegerValueField(.keyboardEventAutorepeat) == 0 {
+                DispatchQueue.main.async { self.onPanelToggle?() }
+            }
+            return nil
+        }
+        guard let action = Hotkeys.action(keyCode: Int(keyCode), modifiers: mods) else {
             return Unmanaged.passUnretained(event)
         }
         if action == .plainPaste {

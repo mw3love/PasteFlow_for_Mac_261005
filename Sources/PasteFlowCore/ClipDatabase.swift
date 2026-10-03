@@ -70,14 +70,19 @@ public final class ClipDatabase {
         try query("SELECT * FROM clip_items WHERE id = ?", [id]).first
     }
 
-    /// 고정 안 된 히스토리, 최신 먼저.
-    public func recent(limit: Int? = nil) throws -> [ClipItem] {
-        try query("SELECT * FROM clip_items WHERE is_pinned = 0 ORDER BY id DESC LIMIT ?", [limit ?? historyMax])
+    /// 고정 안 된 히스토리, 최신 먼저. 패널 목록처럼 원본이 필요 없으면 `withFormats: false`(큰 이미지 원본을 안 읽음).
+    public func recent(limit: Int? = nil, withFormats: Bool = true) throws -> [ClipItem] {
+        try query("SELECT * FROM clip_items WHERE is_pinned = 0 ORDER BY id DESC LIMIT ?", [limit ?? historyMax], withFormats: withFormats)
     }
 
     /// 고정 항목, 고정한 순서대로.
-    public func pinned() throws -> [ClipItem] {
-        try query("SELECT * FROM clip_items WHERE is_pinned = 1 ORDER BY pin_order, id", [])
+    public func pinned(withFormats: Bool = true) throws -> [ClipItem] {
+        try query("SELECT * FROM clip_items WHERE is_pinned = 1 ORDER BY pin_order, id", [], withFormats: withFormats)
+    }
+
+    /// 고정 해제된 것까지 포함해 히스토리를 모두 지운다(고정 항목은 남김).
+    public func clearHistory() throws {
+        try run("DELETE FROM clip_items WHERE is_pinned = 0", [])
     }
 
     public func setPinned(id: Int64, _ pinned: Bool) throws {
@@ -120,7 +125,7 @@ public final class ClipDatabase {
             """, [historyMax])
     }
 
-    private func query(_ sql: String, _ params: [Any?]) throws -> [ClipItem] {
+    private func query(_ sql: String, _ params: [Any?], withFormats: Bool = true) throws -> [ClipItem] {
         var items: [ClipItem] = []
         try step(sql, params) { stmt in
             var item = ClipItem(
@@ -136,7 +141,7 @@ public final class ClipDatabase {
             item.formats = [:]
             items.append(item)
         }
-        for i in items.indices {
+        for i in items.indices where withFormats {
             try step("SELECT type, data FROM clip_formats WHERE item_id = ?", [items[i].id]) { stmt in
                 items[i].formats[String(cString: sqlite3_column_text(stmt, 0))] = self.blob(stmt, 1) ?? Data()
             }

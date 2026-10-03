@@ -11,6 +11,13 @@ final class HotkeysTests: XCTestCase {
         XCTAssertEqual(Hotkeys.action(keyCode: v, modifiers: [.command]), .plainPaste)
     }
 
+    func testPanelToggle() {
+        XCTAssertTrue(Hotkeys.isPanelToggle(keyCode: Hotkeys.keySpace, modifiers: [.option]))
+        XCTAssertFalse(Hotkeys.isPanelToggle(keyCode: Hotkeys.keySpace, modifiers: [.command]))   // Spotlight
+        XCTAssertFalse(Hotkeys.isPanelToggle(keyCode: Hotkeys.keySpace, modifiers: [.control]))   // 한/영 전환
+        XCTAssertFalse(Hotkeys.isPanelToggle(keyCode: Hotkeys.keySpace, modifiers: [.option, .shift]))
+    }
+
     func testOtherCombosIgnored() {
         XCTAssertNil(Hotkeys.action(keyCode: Hotkeys.keyV, modifiers: []))
         XCTAssertNil(Hotkeys.action(keyCode: Hotkeys.keyV, modifiers: [.command, .option]))  // Finder "이동" 붙여넣기
