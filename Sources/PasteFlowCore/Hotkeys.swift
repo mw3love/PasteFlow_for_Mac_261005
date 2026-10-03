@@ -10,6 +10,12 @@ public enum PasteAction: Equatable {
     case plainPaste       // ⌘V — 가로채지 않고 큐만 비운다
 }
 
+/// 화면 계열 단축키 — ⌘⇧+숫자(맥 스크린샷 ⌘⇧3/4/5 옆자리).
+public enum ScreenAction: Equatable {
+    case capture   // ⌘⇧2 영역 캡처
+    case pin       // ⌘⇧1 화면 핀
+}
+
 public struct Modifiers: OptionSet, Hashable {
     public let rawValue: Int
     public init(rawValue: Int) { self.rawValue = rawValue }
@@ -29,6 +35,19 @@ public enum Hotkeys {
     /// 패널 열기/닫기 — ⌥Space.
     public static func isPanelToggle(keyCode: Int, modifiers: Modifiers) -> Bool {
         keyCode == keySpace && modifiers == [.option]
+    }
+
+    /// 숫자 1·2 키의 가상 키 코드(kVK_ANSI_1, kVK_ANSI_2).
+    public static let key1: Int = 18
+    public static let key2: Int = 19
+
+    public static func screenAction(keyCode: Int, modifiers: Modifiers) -> ScreenAction? {
+        guard modifiers == [.command, .shift] else { return nil }
+        switch keyCode {
+        case key2: return .capture
+        case key1: return .pin
+        default: return nil
+        }
     }
 
     public static func action(keyCode: Int, modifiers: Modifiers) -> PasteAction? {

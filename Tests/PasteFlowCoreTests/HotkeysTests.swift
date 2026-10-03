@@ -18,6 +18,13 @@ final class HotkeysTests: XCTestCase {
         XCTAssertFalse(Hotkeys.isPanelToggle(keyCode: Hotkeys.keySpace, modifiers: [.option, .shift]))
     }
 
+    func testScreenActions() {
+        XCTAssertEqual(Hotkeys.screenAction(keyCode: Hotkeys.key2, modifiers: [.command, .shift]), .capture)
+        XCTAssertEqual(Hotkeys.screenAction(keyCode: Hotkeys.key1, modifiers: [.command, .shift]), .pin)
+        XCTAssertNil(Hotkeys.screenAction(keyCode: 20, modifiers: [.command, .shift]))          // ⌘⇧3 = 맥 스크린샷
+        XCTAssertNil(Hotkeys.screenAction(keyCode: Hotkeys.key2, modifiers: [.command]))
+    }
+
     func testOtherCombosIgnored() {
         XCTAssertNil(Hotkeys.action(keyCode: Hotkeys.keyV, modifiers: []))
         XCTAssertNil(Hotkeys.action(keyCode: Hotkeys.keyV, modifiers: [.command, .option]))  // Finder "이동" 붙여넣기

@@ -11,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let hud = PasteHUD()
     private var paste: PasteController!
     private var panel: ClipPanelController?
+    private var screen: ScreenController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -42,6 +43,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             panel = ClipPanelController(db: db, queue: queue, paste: paste)
         }
         keys.onPanelToggle = { [weak self] in self?.panel?.toggle() }
+        screen = ScreenController(paste: paste, db: db)
+        keys.onScreenAction = { [weak self] action in self?.screen?.handle(action) }
         let ok = keys.start()
         StatusLog.append("key tap \(ok ? "started" : "FAILED (손쉬운 사용 권한 필요)") tempCleanup=\(removed)")
     }

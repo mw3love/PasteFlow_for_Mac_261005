@@ -79,6 +79,16 @@ final class PasteController {
         notifyChanged()
     }
 
+    /// 화면 핀용으로 큐의 다음 항목을 꺼낸다(순차 붙여넣기와 포인터 공유). 큐가 비었으면 nil.
+    func takeNextForPin() -> ClipItem? {
+        guard let item = queue.next() else { return nil }
+        let s = queue.status
+        hud.show(items: queue.items, pointer: s.pointer)
+        if queue.isExhausted { finish() }
+        notifyChanged()
+        return item
+    }
+
     func notifyChanged() {
         NotificationCenter.default.post(name: .pasteFlowStateChanged, object: nil)
     }

@@ -9,6 +9,7 @@ final class KeyInterceptor {
 
     var onAction: ((PasteAction) -> Void)?
     var onPanelToggle: (() -> Void)?
+    var onScreenAction: ((ScreenAction) -> Void)?
 
     private var tap: CFMachPort?
     private var swallowedKeyUp: Int64?
@@ -59,6 +60,13 @@ final class KeyInterceptor {
             swallowedKeyUp = keyCode
             if event.getIntegerValueField(.keyboardEventAutorepeat) == 0 {
                 DispatchQueue.main.async { self.onPanelToggle?() }
+            }
+            return nil
+        }
+        if let screen = Hotkeys.screenAction(keyCode: Int(keyCode), modifiers: mods) {
+            swallowedKeyUp = keyCode
+            if event.getIntegerValueField(.keyboardEventAutorepeat) == 0 {
+                DispatchQueue.main.async { self.onScreenAction?(screen) }
             }
             return nil
         }
