@@ -4,6 +4,9 @@ import PasteFlowCore
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
     private let menu = NSMenu()
+    private var db: ClipDatabase!
+    private let queue = PasteQueue()
+    private let monitor = ClipboardMonitor()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -21,6 +24,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if !status.accessibility || !status.screenRecording {
             PermissionStatus.requestMissing()
         }
+        startClipboard()
+    }
+
+    // 클립보드 감시 → DB 저장 → 순차 큐
+    private func startClipboard() {
+        do {
+            let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent("PasteFlow")
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            db = try ClipDatabase(path: dir.appendingPathComponent("pasteflow.db").path)
+            if let v = try db.setting("queue_idle_reset_sec"), let sec = TimeInterval(v) {
+                queue.idleResetSec = sec
+            }
+        } catch {
+            StatusLog.append("DB 열기 실패: \(error)")
+            return
+        }
+        monitor.onCopy = { [weak self] item in
+            guard let self else { return }
+            do {
+                var saved = item
+                saved.id = try self.db.insert(item)
+                self.queue.add(saved)
+                let q = self.queue.status
+                StatusLog.append("copy id=\(saved.id!) kind=\(item.kind.rawValue) formats=\(item.formats.count) queue=\(q.pointer)/\(q.total) preview=\(item.previewText.prefix(40).replacingOccurrences(of: "\n", with: " "))")
+            } catch {
+                StatusLog.append("저장 실패: \(error)")
+            }
+        }
+        monitor.start()
     }
 
     // 메뉴를 열 때마다 권한 상태를 새로 읽어 표시
@@ -28,6 +61,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.removeAllItems()
         let s = PermissionStatus.current()
         menu.addItem(withTitle: "PasteFlow", action: nil, keyEquivalent: "")
+        menu.addItem(.separator())
+        // 임시 확인용(5단계 패널이 생기면 제거): 큐 상태와 최근 항목
+        let q = queue.status
+        menu.addItem(withTitle: "순차 큐: \(q.pointer)/\(q.total)", action: nil, keyEquivalent: "")
+        for item in (try? db?.recent(limit: 5)) ?? [] {
+            let title = item.previewText.replacingOccurrences(of: "\n", with: " ")
+            menu.addItem(withTitle: "· " + String(title.prefix(40)), action: nil, keyEquivalent: "")
+        }
         menu.addItem(.separator())
         menu.addItem(withTitle: "손쉬운 사용: \(s.accessibility ? "허용됨" : "필요")", action: nil, keyEquivalent: "")
         menu.addItem(withTitle: "화면 기록: \(s.screenRecording ? "허용됨" : "필요")", action: nil, keyEquivalent: "")
