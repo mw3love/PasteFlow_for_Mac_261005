@@ -15,6 +15,13 @@ final class ClipClassifierTests: XCTestCase {
         XCTAssertFalse(ClipClassifier.shouldSkip(types: ["public.utf8-plain-text"]))
     }
 
+    func testEmptyClipboardIsNotRecorded() {
+        XCTAssertTrue(ClipClassifier.isEmpty(formats: ["public.utf8-plain-text": Data()]))
+        XCTAssertTrue(ClipClassifier.isEmpty(formats: ["public.utf8-plain-text": Data("  \n".utf8)]))
+        XCTAssertFalse(ClipClassifier.isEmpty(formats: ["public.utf8-plain-text": Data("a".utf8)]))
+        XCTAssertFalse(ClipClassifier.isEmpty(formats: ["public.png": Data([1])]))
+    }
+
     func testPreview() {
         let text = ["public.utf8-plain-text": Data("  안녕\n".utf8)]
         XCTAssertEqual(ClipClassifier.preview(formats: text, kind: .text), "안녕")

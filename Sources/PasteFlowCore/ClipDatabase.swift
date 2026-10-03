@@ -98,6 +98,21 @@ public final class ClipDatabase {
         }
     }
 
+    /// 글자 내용이 정확히 같은 항목을 지운다(고정 포함) — 비밀값이 히스토리에 남았을 때 정리용. 지운 id를 돌려준다.
+    @discardableResult
+    public func deleteItems(withPlainText text: String) throws -> [Int64] {
+        let target = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !target.isEmpty else { return [] }
+        var ids: [Int64] = []
+        try step("SELECT item_id, data FROM clip_formats WHERE type = ?", [ClipClassifier.plainText]) { stmt in
+            if let d = self.blob(stmt, 1), String(data: d, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) == target {
+                ids.append(sqlite3_column_int64(stmt, 0))
+            }
+        }
+        for id in ids { try delete(id: id) }
+        return ids
+    }
+
     public func delete(id: Int64) throws {
         try run("DELETE FROM clip_items WHERE id = ?", [id])
     }

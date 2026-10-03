@@ -14,6 +14,7 @@ public enum PasteAction: Equatable {
 public enum ScreenAction: Equatable {
     case capture   // ⌘⇧2 영역 캡처
     case pin       // ⌘⇧1 화면 핀
+    case ocr       // ⌘⇧E 화면 OCR
 }
 
 public struct Modifiers: OptionSet, Hashable {
@@ -41,11 +42,15 @@ public enum Hotkeys {
     public static let key1: Int = 18
     public static let key2: Int = 19
 
+    /// E 키의 가상 키 코드(kVK_ANSI_E).
+    public static let keyE: Int = 14
+
     public static func screenAction(keyCode: Int, modifiers: Modifiers) -> ScreenAction? {
         guard modifiers == [.command, .shift] else { return nil }
         switch keyCode {
         case key2: return .capture
         case key1: return .pin
+        case keyE: return .ocr
         default: return nil
         }
     }

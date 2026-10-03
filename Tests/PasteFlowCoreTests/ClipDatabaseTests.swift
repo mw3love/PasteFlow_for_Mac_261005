@@ -68,6 +68,18 @@ final class ClipDatabaseTests: XCTestCase {
         XCTAssertEqual(try db.pinned().count, 1)
     }
 
+    func testDeleteItemsWithPlainTextRemovesSecretCopies() throws {
+        let db = try ClipDatabase(path: ":memory:")
+        let a = try db.insert(text("sk-secret-123"))
+        try db.setPinned(id: a, true)
+        _ = try db.insert(text(" sk-secret-123\n"))
+        _ = try db.insert(text("keep me"))
+        XCTAssertEqual(try db.deleteItems(withPlainText: "sk-secret-123").count, 2)
+        XCTAssertEqual(try db.recent().map(\.previewText), ["keep me"])
+        XCTAssertTrue(try db.pinned().isEmpty)
+        XCTAssertTrue(try db.deleteItems(withPlainText: "  ").isEmpty)
+    }
+
     func testDelete() throws {
         let db = try ClipDatabase(path: ":memory:")
         let id = try db.insert(text("x"))

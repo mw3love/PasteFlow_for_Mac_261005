@@ -14,7 +14,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var screen: ScreenController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // 자리 값이 없으면 맥이 새 아이콘을 맨 왼쪽(Hidden Bar 숨김 구역)에 둔다 → 첫 실행에 오른쪽 자리를 정해 둔다.
+        // 값은 메뉴바 오른쪽 끝에서의 거리. Hidden Bar 화살표(385)보다 작으면 늘 보이는 구역이다.
+        let positionKey = "NSStatusItem Preferred Position PasteFlowMain"
+        if UserDefaults.standard.object(forKey: positionKey) == nil {
+            UserDefaults.standard.set(360, forKey: positionKey)
+        }
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        statusItem.autosaveName = "PasteFlowMain"
         statusItem.button?.image = NSImage(systemSymbolName: "doc.on.clipboard", accessibilityDescription: "PasteFlow")
         menu.delegate = self
         statusItem.menu = menu
@@ -88,6 +95,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let open = menu.addItem(withTitle: "패널 열기", action: #selector(openPanel), keyEquivalent: " ")
         open.keyEquivalentModifierMask = [.option]
         open.target = self
+        menu.addItem(withTitle: "OCR 설정…", action: #selector(openOCRSettings), keyEquivalent: "").target = self
+        // 메뉴를 열 때는 네트워크·비밀값을 건드리지 않는다(메뉴가 키보드를 잡고 있어 뜬 창에 입력이 안 됨) — 마지막 값만
+        menu.addItem(withTitle: OCRSettings.cachedCredits(db) ?? "크레딧: OCR 설정에서 확인", action: nil, keyEquivalent: "")
         menu.addItem(.separator())
         menu.addItem(withTitle: "손쉬운 사용: \(s.accessibility ? "허용됨" : "필요")", action: nil, keyEquivalent: "")
         menu.addItem(withTitle: "화면 기록: \(s.screenRecording ? "허용됨" : "필요")", action: nil, keyEquivalent: "")
@@ -99,6 +109,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func openPanel() { panel?.show() }
+
+    @objc private func openOCRSettings() { OCRSettingsWindow.show(db: db) }
 
     @objc private func openPrivacySettings() {
         let s = PermissionStatus.current()

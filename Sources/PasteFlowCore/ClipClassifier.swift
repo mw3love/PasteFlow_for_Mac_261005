@@ -23,6 +23,15 @@ public enum ClipClassifier {
         types.contains { skipMarkers.contains($0) }
     }
 
+    /// 기록할 내용이 없는 복사인가(예: 빈 글자만 있는 클립보드).
+    public static func isEmpty(formats: [String: Data]) -> Bool {
+        let meaningful = formats.filter { type, data in
+            if type == plainText { return !(String(data: data, encoding: .utf8) ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            return !data.isEmpty
+        }
+        return meaningful.isEmpty
+    }
+
     public static func kind(for types: [String]) -> ClipItem.Kind {
         let set = Set(types)
         if set.contains(fileURL) { return .file }

@@ -5,8 +5,11 @@ import AppKit
 final class CaptureOverlay {
     static let dragThreshold: CGFloat = 4
 
-    /// (PNG, 캡처한 Cocoa 전역 사각형)
-    var onCapture: ((Data, NSRect) -> Void)?
+    enum Mode { case capture, ocr }
+
+    /// (PNG, 캡처한 Cocoa 전역 사각형, 모드)
+    var onCapture: ((Data, NSRect, Mode) -> Void)?
+    private(set) var mode: Mode = .capture
 
     private var windows: [OverlayWindow] = []
     private var snapshot: ScreenSnapshot?
@@ -14,8 +17,9 @@ final class CaptureOverlay {
 
     var isActive: Bool { !windows.isEmpty }
 
-    func start() {
+    func start(mode: Mode = .capture) {
         guard !isActive else { return }
+        self.mode = mode
         Task { @MainActor in
             let t0 = Date()
             do {
@@ -54,8 +58,9 @@ final class CaptureOverlay {
 
     func finish(rect: NSRect, on display: ScreenSnapshot.Display) {
         guard let snap = snapshot, let png = snap.crop(rect, on: display, includeCursor: includeCursor) else { close(); return }
+        let m = mode
         close()
-        onCapture?(png, rect)
+        onCapture?(png, rect, m)
     }
 
     private func close() {

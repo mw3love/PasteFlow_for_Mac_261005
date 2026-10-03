@@ -50,7 +50,7 @@ final class ClipboardMonitor {
             guard let data = pbItem.data(forType: type), data.count <= ClipClassifier.maxFormatBytes else { continue }
             formats[type.rawValue] = data
         }
-        guard !formats.isEmpty else { return nil }
+        guard !ClipClassifier.isEmpty(formats: formats) else { return nil }
 
         let hash = ClipItem.contentHash(formats)
         guard hash != lastHash else { return nil }

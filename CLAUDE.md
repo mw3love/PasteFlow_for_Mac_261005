@@ -37,6 +37,12 @@ scripts/build.sh --no-run  # 실행 없이 설치만
   - 첫 캡처 때 맥이 "시스템 개인정보 보호 윈도우 선택기를 우회하여 화면에 직접 접근" 허용 창을 따로 띄운다(화면 기록 권한과 별개). 사용자가 허용함(2026-10-03). 다시 묻는 주기는 확인 필요.
   - 한계: 자유 드래그 선택은 시작한 모니터 안으로 한정(여러 모니터 걸침 합성 없음). 요소 단위 스냅 없음(PLAN.md v1 마지막 단계).
   - 2026-10-03 사용자 실조건검증: 창 클릭·자유 드래그 캡처, 패널·`⌃⌘V` 연동, 캡처 3장 순차 핀, 글자 핀 모두 정상.
+- OCR(`⌘⇧E`, `GatewayOCR` in Core + `ScreenController.recognize`): 캡처 오버레이를 OCR 모드로 재사용 → jbnu 게이트웨이(`/chat/completions`, 브라우저형 UA — Cloudflare 1010 회피, `max_tokens` 16384 — 생각 토큰 때문에 작으면 잘림) → 글자를 클립보드에 올려 감시기가 히스토리·큐에 넣음 → 성공 시 크레딧 캐시 갱신. 설정 창 `OCRSettingsWindow`(메뉴바·패널 빈 곳 우클릭): 모델 콤보 + 새로고침(`/models` 전체, 거르지 않음 → DB `ocr_models_cache`), 연결 테스트(앱 안 한글 샘플, **폴백 없이** 고른 모델만), 크레딧(`/credits/` → DB `ocr_credits_text`).
+  - API 키: `SecretStore` 파일(`~/Library/Application Support/PasteFlow/secrets/ocr_api_key`, 600/700). **키체인 쓰지 말 것** — 팀 ID 없는 자체 서명 앱은 빌드마다 비밀번호 창이 뜸(추정: 키체인이 앱 지문 cdhash로 기억). 터미널 `security`로 읽어도 매번 창이 뜸.
+  - **메뉴를 열 때 네트워크·비밀값을 건드리지 말 것** — 메뉴가 키보드를 잡고 있어 그때 뜬 시스템 창에 입력이 안 된다(실사례). 메뉴는 캐시 값만.
+  - 키를 붙여넣으려고 복사하면 히스토리에 기록된다 → 저장 시 `ClipDatabase.deleteItems(withPlainText:)`로 같은 내용 삭제. 빈 클립보드는 기록 안 함(`ClipClassifier.isEmpty`).
+  - 이 맥에는 `~/.claude/.secrets/`(kairos 키 파일)가 없다 — git 동기화에서 빠지는 파일.
+  - 2026-10-03 실측(한글 샘플): 3.5-flash-lite 2.1~2.9초, 3.1-flash-lite 1.6~2.0초, 3.8-flash 2.8~3.5초, 모두 정확. 호출당 크레딧 약 1. 사용자 실조건검증: 새로고침·연결 테스트·실제 OCR 정상.
 - 자체 시험 함정: 이 맥의 사용자는 Chrome 전체 화면을 자주 띄워 두므로, 자동 키 입력 시험 중 맨 앞 창이 바뀌어 주입한 ⌘V가 엉뚱한 앱으로 갈 수 있다. 실제 붙는 결과는 사용자 직접 확인이 확실하다.
 - 데이터: `~/Library/Application Support/PasteFlow/pasteflow.db` (히스토리 50개, 고정 제외).
 - 알려진 한계: 클립보드에 항목이 여러 개면(Finder에서 파일 여러 개 복사 등) 첫 항목만 보존한다. 32MB 넘는 형식 하나는 건너뛴다.

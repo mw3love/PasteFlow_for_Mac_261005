@@ -12,12 +12,18 @@ final class ScreenController {
     init(paste: PasteController, db: ClipDatabase?) {
         self.paste = paste
         self.db = db
-        overlay.onCapture = { [weak self] png, rect in self?.didCapture(png, rect) }
+        overlay.onCapture = { [weak self] png, rect, mode in
+            switch mode {
+            case .capture: self?.didCapture(png, rect)
+            case .ocr: self?.recognize(png)
+            }
+        }
     }
 
     func handle(_ action: ScreenAction) {
         switch action {
-        case .capture: overlay.isActive ? overlay.cancel() : overlay.start()
+        case .capture: overlay.isActive ? overlay.cancel() : overlay.start(mode: .capture)
+        case .ocr: overlay.isActive ? overlay.cancel() : overlay.start(mode: .ocr)
         case .pin: pin()
         }
     }
@@ -44,6 +50,38 @@ final class ScreenController {
         } catch {
             StatusLog.append("capture save FAILED: \(error)")
             Toast.show("캡처됨", detail: "파일 저장 실패 — 클립보드에는 있어요")
+        }
+    }
+
+    // MARK: OCR
+
+    private func recognize(_ png: Data) {
+        guard let key = OCRSettings.apiKey else {
+            Toast.show("OCR 실패", detail: GatewayOCR.Failure.missingKey.description, duration: 3)
+            return
+        }
+        let base = OCRSettings.baseURL(db), model = OCRSettings.model(db)
+        Toast.show("글자 읽는 중…", detail: model, duration: 60)
+        let t0 = Date()
+        Task { @MainActor in
+            let (result, used) = await GatewayOCR.recognize(png: png, baseURL: base, apiKey: key, model: model,
+                                                            fallback: OCRSettings.fallback(self.db, for: model))
+            let ms = Int(Date().timeIntervalSince(t0) * 1000)
+            switch result {
+            case .success(let text):
+                // 클립보드에 올리면 감시기가 히스토리·큐에 넣는다(캡처와 같은 경로)
+                let pb = NSPasteboard.general
+                pb.clearContents()
+                pb.setString(text, forType: .string)
+                StatusLog.append("ocr ok model=\(used) chars=\(text.count) ms=\(ms)")
+                let first = text.split(separator: "\n").first.map(String.init) ?? text
+                Toast.show(used == model ? "OCR 완료" : "OCR 완료 (\(used)로 대체)", detail: String(first.prefix(60)), duration: 2.5)
+                try? await OCRSettings.refreshCredits(self.db, key: key)   // 메뉴에 보일 크레딧 갱신
+            case .failure(let f):
+                StatusLog.append("ocr FAILED model=\(used) ms=\(ms) reason=\(f)")
+                let hint = f.shouldFallback ? " — OCR 설정에서 새로고침 후 모델을 고르세요" : ""
+                Toast.show("OCR 실패", detail: f.description + hint, duration: 4)
+            }
         }
     }
 

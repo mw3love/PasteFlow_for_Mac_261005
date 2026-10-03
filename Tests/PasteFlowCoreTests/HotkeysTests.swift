@@ -21,6 +21,7 @@ final class HotkeysTests: XCTestCase {
     func testScreenActions() {
         XCTAssertEqual(Hotkeys.screenAction(keyCode: Hotkeys.key2, modifiers: [.command, .shift]), .capture)
         XCTAssertEqual(Hotkeys.screenAction(keyCode: Hotkeys.key1, modifiers: [.command, .shift]), .pin)
+        XCTAssertEqual(Hotkeys.screenAction(keyCode: Hotkeys.keyE, modifiers: [.command, .shift]), .ocr)
         XCTAssertNil(Hotkeys.screenAction(keyCode: 20, modifiers: [.command, .shift]))          // ⌘⇧3 = 맥 스크린샷
         XCTAssertNil(Hotkeys.screenAction(keyCode: Hotkeys.key2, modifiers: [.command]))
     }
