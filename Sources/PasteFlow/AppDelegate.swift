@@ -50,6 +50,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             panel = ClipPanelController(db: db, queue: queue, paste: paste)
         }
         keys.onPanelToggle = { [weak self] in self?.panel?.toggle() }
+        AnnotationCanvas.settingsDB = db   // 주석 도구별 색·크기 기억
         screen = ScreenController(paste: paste, db: db)
         keys.onScreenAction = { [weak self] action in self?.screen?.handle(action) }
         let ok = keys.start()
