@@ -1,7 +1,7 @@
 import AppKit
 
-/// 영역 캡처 오버레이(⌘⇧2). 얼린 화면 위에서 커서 아래 창을 하이라이트하고,
-/// 클릭 = 그 창 캡처, 4pt 이상 끌기 = 자유 사각형, 우클릭/Esc = 취소, Space = 실제 커서 포함 토글.
+/// 영역 캡처 오버레이(⌘⇧2). 얼린 화면 위에서 커서 아래 요소(버튼·링크 등, 제목 막대 위면 창 전체)를 하이라이트하고,
+/// 클릭 = 그 요소·창 캡처, 4pt 이상 끌기 = 자유 사각형, 우클릭/Esc = 취소, Space = 실제 커서 포함 토글.
 final class CaptureOverlay {
     static let dragThreshold: CGFloat = 4
 
@@ -125,7 +125,10 @@ final class OverlayView: NSView {
 
     func refreshHover(at global: NSPoint) {
         guard dragStart == nil else { return }
-        let new = display.screen.frame.contains(global) ? snapshot.windows.first { $0.contains(global) } : nil
+        var new: NSRect?
+        if display.screen.frame.contains(global), let w = snapshot.windows.first(where: { $0.rect.contains(global) }) {
+            new = ElementSnapper.rect(at: global, pid: w.pid, window: w.rect)
+        }
         if new != highlight { highlight = new; needsDisplay = true }
     }
 

@@ -9,8 +9,13 @@ struct ScreenSnapshot {
         let image: CGImage      // 픽셀 단위(Retina면 2배)
     }
 
-    /// 창 사각형(Cocoa 전역 좌표, 왼쪽 아래 원점). 앞에 있는 창이 먼저.
-    let windows: [NSRect]
+    struct Window {
+        let rect: NSRect        // Cocoa 전역 좌표(왼쪽 아래 원점)
+        let pid: pid_t          // 요소 스냅 때 이 앱에 묻는다
+    }
+
+    /// 앞에 있는 창이 먼저.
+    let windows: [Window]
     let displays: [Display]
     /// 찍기 직전의 실제 커서(Space로 결과에 넣을 때 사용).
     let cursorImage: NSImage?
@@ -39,19 +44,19 @@ struct ScreenSnapshot {
     }
 
     /// 보이는 일반 창(layer 0)의 사각형. 내 앱 창·아주 작은 창은 뺀다.
-    private static func currentWindowRects() -> [NSRect] {
+    private static func currentWindowRects() -> [Window] {
         guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else { return [] }
         let myPid = ProcessInfo.processInfo.processIdentifier
         let primaryHeight = NSScreen.screens.first?.frame.height ?? 0
         return list.compactMap { w in
             guard (w[kCGWindowLayer as String] as? Int) == 0,
-                  (w[kCGWindowOwnerPID as String] as? Int32) != myPid,
+                  let pid = w[kCGWindowOwnerPID as String] as? Int32, pid != myPid,
                   ((w[kCGWindowAlpha as String] as? Double) ?? 1) > 0,
                   let b = w[kCGWindowBounds as String] as? [String: CGFloat],
                   let x = b["X"], let y = b["Y"], let width = b["Width"], let height = b["Height"],
                   width >= 40, height >= 40 else { return nil }
             // CG 좌표(왼쪽 위 원점) → Cocoa 좌표(왼쪽 아래 원점)
-            return NSRect(x: x, y: primaryHeight - y - height, width: width, height: height)
+            return Window(rect: NSRect(x: x, y: primaryHeight - y - height, width: width, height: height), pid: pid)
         }
     }
 

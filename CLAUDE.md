@@ -35,7 +35,10 @@ scripts/build.sh --no-run  # 실행 없이 설치만
 - 캡처·핀(`ScreenController`): `⌘⇧2` → `ScreenSnapshot`(ScreenCaptureKit으로 모니터별 "얼린" 화면 + `CGWindowListCopyWindowInfo` 창 사각형, 실측 44~122ms) → `CaptureOverlay`(모니터마다 NSPanel, 창 하이라이트 클릭 / 4pt 이상 끌면 자유 사각형 / 우클릭·Esc 취소 / Space 실제 커서 포함) → PNG(144dpi 기록)를 클립보드에 올려 **감시기가 일반 복사처럼** 히스토리·큐에 넣게 하고, `~/Pictures/PasteFlow/clip_YYYYMMDD_HHMMSS.png` 저장(설정 키 `capture_save_folder`로 바꿀 수 있음) + `Toast`. `⌘⇧1` → 큐에 다음이 있으면 그것(포인터 공유), 없으면 클립보드 이미지/글자(글자는 M1 카드 이미지로, 경로 붙여넣기 PNG 경로면 원본 복원). 마지막 캡처와 같은 이미지는 캡처한 자리에 핀.
   - `CGWindowListCreateImage`는 이 SDK(macOS 26)에서 **사용 불가**(컴파일 오류) → ScreenCaptureKit 필수.
   - 첫 캡처 때 맥이 "시스템 개인정보 보호 윈도우 선택기를 우회하여 화면에 직접 접근" 허용 창을 따로 띄운다(화면 기록 권한과 별개). 사용자가 허용함(2026-10-03). 다시 묻는 주기는 확인 필요.
-  - 한계: 자유 드래그 선택은 시작한 모니터 안으로 한정(여러 모니터 걸침 합성 없음). 요소 단위 스냅 없음(PLAN.md v1 마지막 단계).
+  - 한계: 자유 드래그 선택은 시작한 모니터 안으로 한정(여러 모니터 걸침 합성 없음).
+  - 요소 스냅(`ElementSnapper` + Core `ElementSnap`): 커서가 움직일 때마다 얼려 둔 창의 앱(pid)에 `AXUIElementCopyElementAtPosition`으로 묻고 부모 쪽 최대 8단계만 본다(1회 1~2ms). 규칙(윈도우판과 같은 뜻): 창 위 28pt(제목 막대)·`AXWindow`/`AXToolbar` = 창 전체, 8pt 미만은 부모, 버튼·링크 안 글자·그림은 바깥 요소, 창 넓이 90% 이상 = 창 전체, 요소는 창 안으로 자름.
+  - 크롬 계열은 웹페이지 안 접근성 정보를 꺼 둔다 → 앱 시작·새 앱 실행 3초 뒤 `AXEnhancedUserInterface`를 설정해 깨운다(실측: 오류 -25208을 돌려주지만 약 1.5초 뒤 켜지고 유지. `AXManualAccessibility`는 크롬이 거부 -25205). 일렉트론은 `AXManualAccessibility`(미측정 — VS Code를 뒤에서 열면 창이 안 떠서 못 잼). 다른 앱은 건드리지 않음. 크롬 성능 영향은 확인 필요.
+  - 2026-10-04 사용자 실조건검증: 요소 하이라이트·클릭 캡처 정상.
   - 2026-10-03 사용자 실조건검증: 창 클릭·자유 드래그 캡처, 패널·`⌃⌘V` 연동, 캡처 3장 순차 핀, 글자 핀 모두 정상.
 - OCR(`⌘⇧E`, `GatewayOCR` in Core + `ScreenController.recognize`): 캡처 오버레이를 OCR 모드로 재사용 → jbnu 게이트웨이(`/chat/completions`, 브라우저형 UA — Cloudflare 1010 회피, `max_tokens` 16384 — 생각 토큰 때문에 작으면 잘림) → 글자를 클립보드에 올려 감시기가 히스토리·큐에 넣음 → 성공 시 크레딧 캐시 갱신. 설정창 OCR 탭 `OCRSettingsPane`([저장] 버튼 — 키 입력이 있어서): 모델 콤보 + 새로고침(`/models` 전체, 거르지 않음 → DB `ocr_models_cache`), 연결 테스트(앱 안 한글 샘플, **폴백 없이** 고른 모델만), 크레딧(`/credits/` → DB `ocr_credits_text`).
   - API 키: `SecretStore` 파일(`~/Library/Application Support/PasteFlow/secrets/ocr_api_key`, 600/700). **키체인 쓰지 말 것** — 팀 ID 없는 자체 서명 앱은 빌드마다 비밀번호 창이 뜸(추정: 키체인이 앱 지문 cdhash로 기억). 터미널 `security`로 읽어도 매번 창이 뜸.

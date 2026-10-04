@@ -65,6 +65,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         keys.onPanelToggle = { [weak self] in self?.panel?.toggle() }
         AnnotationCanvas.settingsDB = db   // 주석 도구별 색·크기 기억
         screen = ScreenController(paste: paste, db: db)
+        ElementSnapper.startWaking()
         keys.onScreenAction = { [weak self] action in self?.screen?.handle(action) }
         SettingsWindow.configure(db: db, keys: keys, queue: queue)   // 저장된 단축키·알림·큐 시간
         let ok = keys.start()
