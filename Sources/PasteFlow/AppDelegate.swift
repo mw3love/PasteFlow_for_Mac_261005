@@ -83,7 +83,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             StatusLog.append("DB 열기 실패: \(error)")
             return
         }
-        monitor.onCopy = { [weak self] item in
+        monitor.onCopy = { [weak self] item, fromApp in
             guard let self else { return }
             do {
                 var saved = item
@@ -91,6 +91,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 self.queue.add(saved)
                 self.paste?.didCopy()
                 let q = self.queue.status
+                if !fromApp { Toast.showCopy(saved, queueCount: q.total) }   // 윈도우판 복사 토스트(Q배지)
                 StatusLog.append("copy id=\(saved.id!) kind=\(item.kind.rawValue) formats=\(item.formats.count) queue=\(q.pointer)/\(q.total) preview=\(item.previewText.prefix(40).replacingOccurrences(of: "\n", with: " "))")
             } catch {
                 StatusLog.append("저장 실패: \(error)")

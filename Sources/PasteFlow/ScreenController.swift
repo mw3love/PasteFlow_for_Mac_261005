@@ -40,6 +40,7 @@ final class ScreenController {
         let item = NSPasteboardItem()
         item.setData(png, forType: .png)
         pb.writeObjects([item])
+        ClipboardMonitor.noteAppWrite()
 
         let folderSetting = (try? db?.setting("capture_save_folder")) ?? nil
         let folder = folderSetting.map { URL(fileURLWithPath: $0) } ?? CaptureFiles.defaultFolder
@@ -76,6 +77,7 @@ final class ScreenController {
                 let pb = NSPasteboard.general
                 pb.clearContents()
                 pb.setString(text, forType: .string)
+                ClipboardMonitor.noteAppWrite()
                 StatusLog.append("ocr ok model=\(used) chars=\(text.count) ms=\(ms)")
                 let first = text.split(separator: "\n").first.map(String.init) ?? text
                 Toast.show(used == model ? "OCR 완료" : "OCR 완료 (\(used)로 대체)", detail: String(first.prefix(60)), duration: 2.5, key: "ocr", always: true)

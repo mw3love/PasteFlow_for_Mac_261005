@@ -5,7 +5,10 @@ import PasteFlowCore
 final class ClipboardMonitor {
     static let pollInterval: TimeInterval = 0.25
 
-    var onCopy: ((ClipItem) -> Void)?
+    /// (항목, 앱이 직접 올린 것인지) — 캡처·OCR·주석은 자기 알림이 따로 있어 복사 알림을 안 띄운다.
+    var onCopy: ((ClipItem, Bool) -> Void)?
+    /// 앱이 기록되라고 클립보드에 올린 changeCount(캡처·OCR·주석 복사).
+    private static var appWriteCounts: Set<Int> = []
 
     private let pasteboard = NSPasteboard.general
     private var lastChangeCount: Int
@@ -32,6 +35,11 @@ final class ClipboardMonitor {
         selfChangeCounts.insert(pasteboard.changeCount)
     }
 
+    /// 앱이 히스토리·큐에 넣으려고 클립보드에 올린 직후 호출 — 기록은 하되 "복사됨" 알림은 안 띄운다.
+    static func noteAppWrite() {
+        appWriteCounts.insert(NSPasteboard.general.changeCount)
+    }
+
     /// 방금 클립보드에 올린 내용이 디스크에도 저장됐음을 알린다(캡처).
     func attachSavedPath(_ path: String) {
         savedPaths[pasteboard.changeCount] = path
@@ -43,10 +51,12 @@ final class ClipboardMonitor {
         lastChangeCount = count
         let savedPath = savedPaths.removeValue(forKey: count)
         savedPaths.removeAll()
+        let fromApp = Self.appWriteCounts.remove(count) != nil
+        Self.appWriteCounts.removeAll()
         if selfChangeCounts.remove(count) != nil { return }
         guard var item = capture() else { return }
         item.savedImagePath = savedPath
-        onCopy?(item)
+        onCopy?(item, fromApp)
     }
 
     private func capture() -> ClipItem? {

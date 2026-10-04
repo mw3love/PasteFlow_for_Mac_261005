@@ -130,6 +130,7 @@ final class PinWindow: NSPanel {
         let item = NSPasteboardItem()
         item.setData(png, forType: .png)
         pb.writeObjects([item])
+        ClipboardMonitor.noteAppWrite()
         StatusLog.append("annotation copied items=\(canvas.doc.items.count) bytes=\(png.count)")
         Toast.show("주석 이미지 복사됨", detail: "히스토리·큐에 들어가요")
         setEditing(false)

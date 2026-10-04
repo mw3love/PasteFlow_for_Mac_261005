@@ -44,7 +44,7 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate {
     private let idleField = NSTextField()
     private let idleStepper = NSStepper()
     private let folderLabel = NSTextField(labelWithString: "")
-    private let toastCheck = NSButton(checkboxWithTitle: "확인 알림 보이기 (캡처됨·주석 복사됨)", target: nil, action: nil)
+    private let toastCheck = NSButton(checkboxWithTitle: "알림 보이기 (복사·캡처됨·주석 복사됨)", target: nil, action: nil)
     // 단축키
     private var recorders: [HotkeyAction: NSButton] = [:]
     private var notes: [HotkeyAction: NSTextField] = [:]

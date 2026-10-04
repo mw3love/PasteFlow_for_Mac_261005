@@ -61,10 +61,12 @@ scripts/build.sh --no-run  # 실행 없이 설치만
   - 2026-10-03 프록시검증(자동 입력): 8도구 그리기·번호 자동 증가·글자·복사(800×600 결과, 히스토리 기록)·되돌리기. 같은 날 사용자 실조건검증: 캡처→핀→편집→복사→다른 앱 붙여넣기, 끌기·손잡이, 한글 글자 입력 모두 정상.
 - 설정창(`SettingsWindow`, 메뉴바 "설정…"·패널 빈 곳 우클릭·실행 중인 앱을 다시 열 때): 탭 일반 / 단축키 / OCR. 일반·단축키는 바꾸는 즉시 저장·적용.
   - 단축키: Core `HotkeyMap`(기본값 위에 바꾼 것만 DB `hotkeys` JSON) → `KeyInterceptor.map`을 갈아 끼워 재시작 없이 적용. 일반 `⌘V`는 큐 비우기 신호라 `Hotkeys.isPlainPaste`로 고정. 검사: ⌘·⌃·⌥ 하나는 필수, 예약 키(⌘V/C/X/Z/A/Q/W, ⌘Tab, ⌘Space, ⌃Space, ⌘⇧3/4/5) 거부, 다른 동작과 중복 거부, 알려진 겹침은 경고만. 녹화 중엔 `KeyInterceptor.isRecording`으로 전역 단축키가 키를 삼키지 않게 한다.
-  - 일반: 자동 시작(`SMAppService.mainApp` — 한 번도 등록 안 한 상태도 `.notFound`로 나옴), 큐 새 묶음 시간(DB `queue_idle_reset_sec`), 캡처 저장 폴더(`capture_save_folder`), 확인 알림 켜기/끄기(`toast_enabled`).
+  - 일반: 자동 시작(`SMAppService.mainApp` — 한 번도 등록 안 한 상태도 `.notFound`로 나옴), 큐 새 묶음 시간(DB `queue_idle_reset_sec`), 캡처 저장 폴더(`capture_save_folder`), 알림 켜기/끄기(`toast_enabled` — 복사 알림과 확인 알림을 한 칸으로, 2026-10-04 사용자 결정).
   - 2026-10-03: 사용자 실조건검증 — 단축키를 바꾸면 재시작 없이 새 키로 동작. 자동 시작은 자체 서명 앱에서도 등록 성공(status=enabled), 실제 로그인 후 실행은 미확인(맥을 거의 안 꺼서 나중에 — 안 켜지면 그때 수정).
   - macOS 14+는 활성화가 양보식이라 `NSApp.activate`만으로는 설정창이 다른 앱 창 뒤에 남는다 → `orderFrontRegardless()`.
 - 알림(`Toast`): 주 모니터 오른쪽 아래에 최신이 맨 아래로 최대 5개 쌓임. `key`가 같으면 그 자리에서 바뀜(OCR 진행→결과). 알림을 꺼도 `always: true`(실패·OCR)는 뜬다.
+  - 복사 알림(`Toast.showCopy`, 윈도우판 `show_copy_toast`): 다른 앱에서 복사할 때 2초, 앞에 큐 개수 배지 `Q{n}` + 글자 30자(공백·줄바꿈 합침) 또는 이미지 썸네일(원본을 96×72로 줄여 그림). 캡처·OCR·주석 복사는 클립보드에 올린 뒤 `ClipboardMonitor.noteAppWrite()`를 불러 기록은 하되 복사 알림은 안 띄운다(자기 알림이 따로 있음).
+  - 2026-10-04 사용자 실조건검증: 복사 알림·Q 누적, 캡처 때 겹치지 않음, 설정으로 끄기 정상(칸을 합치기 전 기준 — 합친 칸은 화면만 확인).
 - 한 번만 실행: 이미 떠 있으면 새 쪽이 분산 알림으로 설정창을 열게 하고 끝남. Finder에서 다시 열기(`applicationShouldHandleReopen`)도 설정창.
 - 자체 시험 함정: 이 맥의 사용자는 Chrome 전체 화면을 자주 띄워 두므로, 자동 키 입력 시험 중 맨 앞 창이 바뀌어 주입한 ⌘V가 엉뚱한 앱으로 갈 수 있다. 실제 붙는 결과는 사용자 직접 확인이 확실하다.
 - 데이터: `~/Library/Application Support/PasteFlow/pasteflow.db` (히스토리 50개, 고정 제외).
