@@ -13,6 +13,8 @@ final class ClipboardMonitor {
     private var timer: Timer?
     /// 앱이 직접 클립보드를 바꾼 경우의 changeCount — 자기 복사를 히스토리에 다시 넣지 않기 위함.
     private var selfChangeCounts: Set<Int> = []
+    /// 캡처가 클립보드에 올린 이미지의 저장 파일 — 그 changeCount로 기록될 항목에 붙인다(파일 위치 열기용).
+    private var savedPaths: [Int: String] = [:]
 
     init() {
         lastChangeCount = pasteboard.changeCount   // 실행 전부터 있던 내용은 기록하지 않음
@@ -30,12 +32,20 @@ final class ClipboardMonitor {
         selfChangeCounts.insert(pasteboard.changeCount)
     }
 
+    /// 방금 클립보드에 올린 내용이 디스크에도 저장됐음을 알린다(캡처).
+    func attachSavedPath(_ path: String) {
+        savedPaths[pasteboard.changeCount] = path
+    }
+
     private func poll() {
         let count = pasteboard.changeCount
         guard count != lastChangeCount else { return }
         lastChangeCount = count
+        let savedPath = savedPaths.removeValue(forKey: count)
+        savedPaths.removeAll()
         if selfChangeCounts.remove(count) != nil { return }
-        guard let item = capture() else { return }
+        guard var item = capture() else { return }
+        item.savedImagePath = savedPath
         onCopy?(item)
     }
 

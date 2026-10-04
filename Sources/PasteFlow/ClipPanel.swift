@@ -17,6 +17,9 @@ final class ClipPanelController: NSObject {
     private let pinButton = NSButton()
     private let list = NSStackView()
     private let scroll = NSScrollView()
+    private let doc = PanelListView()
+    /// 고정메모와 히스토리 사이 구분선 — 끌어 놓기에서 "고정 영역" 경계.
+    private var pinnedSeparator: NSView?
 
     private var pinnedItems: [ClipItem] = []
     private var historyItems: [ClipItem] = []
@@ -98,7 +101,7 @@ final class ClipPanelController: NSObject {
         list.edgeInsets = NSEdgeInsets(top: 4, left: 10, bottom: 12, right: 10)
         list.translatesAutoresizingMaskIntoConstraints = false
 
-        let doc = FlippedView()
+        doc.controller = self
         doc.translatesAutoresizingMaskIntoConstraints = false
         doc.addSubview(list)
         scroll.documentView = doc
@@ -162,6 +165,7 @@ final class ClipPanelController: NSObject {
         sep.translatesAutoresizingMaskIntoConstraints = false
         sep.heightAnchor.constraint(equalToConstant: 1).isActive = true
         list.addArrangedSubview(sep)
+        pinnedSeparator = sep
         sep.widthAnchor.constraint(equalTo: list.widthAnchor, constant: -20).isActive = true
         addSection("히스토리", key: "history", items: historyItems, qIndex: qIndex, pointer: q.pointer)
 
@@ -259,9 +263,84 @@ final class ClipPanelController: NSObject {
         select(next)
     }
 
+    /// C — 큐 맨 앞 항목에서 누르면 해제, 아니면 그 항목부터 큐를 새로 지정(윈도우판 `_kbd_queue_toggle`).
+    private func toggleQueue(_ id: Int64) {
+        if queue.items.first?.id == id { paste.clearQueueFromPanel() } else { selectQueue(id) }
+    }
+
+    private func selectQueue(_ id: Int64) {
+        guard let ids = QueueSelection.ids(for: id, history: historyItems.compactMap(\.id),
+                                           pinned: pinnedItems.compactMap(\.id)) else { return }
+        paste.setQueue(ids.compactMap(full))   // 붙여넣으려면 원본 형식이 필요하다
+    }
+
+    /// 항목이 가리키는 파일: 이미지는 캡처 저장 파일, Finder 복사는 그 파일, 글자는 경로 글자일 때.
+    private func fileURL(_ id: Int64) -> URL? {
+        guard let item = full(id) else { return nil }
+        let path: String?
+        switch item.kind {
+        case .image: path = item.savedImagePath
+        case .file: path = item.formats[ClipClassifier.fileURL].flatMap { String(data: $0, encoding: .utf8) }
+                .flatMap(URL.init(string:))?.path
+        default: path = item.formats[ClipClassifier.plainText].flatMap { String(data: $0, encoding: .utf8) }?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        guard let p = path, !p.isEmpty, !p.contains("\n") else { return nil }
+        let expanded = (p as NSString).expandingTildeInPath
+        return FileManager.default.fileExists(atPath: expanded) ? URL(fileURLWithPath: expanded) : nil
+    }
+
+    private func openFileLocation(_ id: Int64) {
+        guard let url = fileURL(id) else {
+            Toast.show("파일을 찾을 수 없어요", always: true)
+            return
+        }
+        NSWorkspace.shared.activateFileViewerSelecting([url])
+        StatusLog.append("panel open location id=\(id)")
+    }
+
+    /// 고칠 수 있는 글자(평문·HTML·RTF 항목의 평문). 이미지·파일은 nil.
+    private func editableText(_ id: Int64) -> String? {
+        guard let item = full(id), [.text, .html, .rtf].contains(item.kind) else { return nil }
+        return item.formats[ClipClassifier.plainText].flatMap { String(data: $0, encoding: .utf8) } ?? ""
+    }
+
+    private func editText(_ id: Int64) {
+        guard let text = editableText(id) else { return }
+        TextEditWindow.show(text: text, near: window.frame) { [weak self] new in
+            guard let self, new != text else { return }
+            try? self.db.updateText(id: id, new)
+            StatusLog.append("panel edit id=\(id) chars=\(new.count)")
+            self.reload()
+            self.select(id)
+        }
+    }
+
+    // MARK: 끌어서 고정 순서 바꾸기·고정
+
+    /// 패널 안 끌기 위치 → 고정 영역이면 (표시할 선의 y, 이 항목 앞 — nil은 맨 뒤). 히스토리 영역이면 nil.
+    fileprivate func pinDropTarget(at p: NSPoint) -> (lineY: CGFloat, before: Int64?)? {
+        guard let sep = pinnedSeparator else { return nil }
+        let sepY = sep.convert(sep.bounds, to: doc).minY
+        guard p.y < sepY else { return nil }   // 뒤집힌 좌표: 위쪽이 작은 y
+        let rows = pinnedItems.compactMap(\.id).compactMap { id in itemViews[id].map { (id, $0.convert($0.bounds, to: doc)) } }
+        for (id, r) in rows where p.y < r.midY { return (r.minY - 3, id) }
+        return (rows.last.map { $0.1.maxY + 3 } ?? sepY - 4, nil)
+    }
+
+    /// 고정 항목은 그 자리로 옮기고, 히스토리 항목은 그 자리에 고정한다.
+    fileprivate func dropOnPinned(_ id: Int64, before: Int64?) {
+        if !pinnedItems.contains(where: { $0.id == id }) { try? db.setPinned(id: id, true) }
+        try? db.setPinOrder(PinOrder.moving(id, before: before, in: pinnedItems.compactMap(\.id)))
+        StatusLog.append("panel pin drop id=\(id) before=\(before.map(String.init) ?? "end")")
+        reload()
+        select(id)
+    }
+
     private func dragItem(_ id: Int64, asPath: Bool) -> NSPasteboardItem? {
         guard let item = full(id) else { return nil }
         let pb = NSPasteboardItem()
+        pb.setString(String(id), forType: .pasteFlowItem)   // 패널 안에 놓으면 고정 순서 바꾸기·고정
         if item.kind == .image, let url = paste.tempPNGPath(for: item) {
             if asPath {
                 pb.setString(url.path, forType: .string)       // ⌥+드래그: 경로 글자
@@ -303,6 +382,14 @@ final class ClipPanelController: NSObject {
             togglePinned(id)
             return true
         }
+        if mods.isEmpty, e.keyCode == 8, let id = selectedId {              // C: 큐 지정/해제
+            toggleQueue(id)
+            return true
+        }
+        if mods.isEmpty, e.keyCode == 31, let id = selectedId {             // O: 파일 위치 열기
+            openFileLocation(id)
+            return true
+        }
         return false
     }
 
@@ -313,12 +400,23 @@ final class ClipPanelController: NSObject {
         let isImage = (pinnedItems + historyItems).first { $0.id == id }?.kind == .image
         m.addItem(MenuAction("미리보기", key: " ") { [weak self] in self?.preview(id) })
         m.addItem(MenuAction("붙여넣기", key: "\r") { [weak self] in self?.pasteSelected() })
+        let inQueue = queue.items.contains { $0.id == id }
+        m.addItem(MenuAction(inQueue ? "큐 해제" : "큐에 추가", key: "c") { [weak self] in
+            if inQueue { self?.paste.clearQueueFromPanel() } else { self?.selectQueue(id) } })
+        m.addItem(.separator())
         m.addItem(MenuAction("복사", key: "c", mods: .command) { [weak self] in
             if let item = self?.full(id) { self?.paste.copyToClipboard(item) } })
         if isImage {
             m.addItem(MenuAction("파일로 저장 후 경로 복사") { [weak self] in
                 if let item = self?.full(id) { self?.paste.copyToClipboard(item, asPath: true) } })
         }
+        // 조건부 항목은 숨기지 않고 비활성(윈도우판 — 자리가 흔들리지 않게)
+        let open = MenuAction("파일 위치 열기", key: "o") { [weak self] in self?.openFileLocation(id) }
+        open.isEnabled = fileURL(id) != nil
+        m.addItem(open)
+        let editItem = MenuAction("수정") { [weak self] in self?.editText(id) }
+        editItem.isEnabled = !isImage && editableText(id) != nil
+        m.addItem(editItem)
         m.addItem(.separator())
         m.addItem(MenuAction(isPinned ? "고정 해제" : "고정추가", key: "p") { [weak self] in self?.togglePinned(id) })
         m.addItem(MenuAction("삭제", key: "\u{8}") { [weak self] in self?.delete(id) })
@@ -412,6 +510,55 @@ final class PanelRootView: NSView {
 
 final class FlippedView: NSView {
     override var isFlipped: Bool { true }
+}
+
+extension NSPasteboard.PasteboardType {
+    /// 패널 항목 id — 패널 안에서 끌어 놓을 때만 쓴다.
+    static let pasteFlowItem = NSPasteboard.PasteboardType("com.minwoo.pasteflow.item-id")
+}
+
+/// 패널 목록 바탕 — 항목을 고정 영역에 끌어 놓으면 순서 바꾸기·고정. 놓일 자리에 코랄 선을 그린다.
+final class PanelListView: NSView {
+    weak var controller: ClipPanelController?
+    override var isFlipped: Bool { true }
+    private var lineY: CGFloat? { didSet { if lineY != oldValue { needsDisplay = true } } }
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        registerForDraggedTypes([.pasteFlowItem])
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    private func target(_ info: NSDraggingInfo) -> (lineY: CGFloat, before: Int64?)? {
+        guard info.draggingPasteboard.string(forType: .pasteFlowItem) != nil else { return nil }
+        return controller?.pinDropTarget(at: convert(info.draggingLocation, from: nil))
+    }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation { draggingUpdated(sender) }
+
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        let t = target(sender)
+        lineY = t?.lineY
+        return t == nil ? [] : .move
+    }
+
+    override func draggingExited(_ sender: NSDraggingInfo?) { lineY = nil }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        defer { lineY = nil }
+        guard let t = target(sender), let s = sender.draggingPasteboard.string(forType: .pasteFlowItem),
+              let id = Int64(s) else { return false }
+        // 놓기 처리 중 목록을 다시 그리면 끌기 세션이 지운 뷰를 붙잡는다 → 다음 차례에
+        DispatchQueue.main.async { [weak controller] in controller?.dropOnPinned(id, before: t.before) }
+        return true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard let y = lineY else { return }
+        Theme.coral.setFill()
+        NSBezierPath(roundedRect: NSRect(x: 10, y: y - 1, width: bounds.width - 20, height: 2), xRadius: 1, yRadius: 1).fill()
+    }
 }
 
 /// 클로저로 동작하는 메뉴 항목.
@@ -531,6 +678,8 @@ final class ClipItemView: NSView, NSDraggingSource {
     }
 
     override var mouseDownCanMoveWindow: Bool { false }
+    // 다른 창에서 일하다 패널 항목을 바로 끌 수 있게 — 첫 클릭(패널 깨우기)도 항목이 받는다
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     override func mouseDown(with event: NSEvent) {
         mouseDownEvent = event
@@ -552,7 +701,37 @@ final class ClipItemView: NSView, NSDraggingSource {
     override func menu(for event: NSEvent) -> NSMenu? { onMenu?() }
 
     func draggingSession(_ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
-        context == .outsideApplication ? [.copy] : []
+        context == .outsideApplication ? [.copy] : [.move]   // 앱 안 = 패널 고정 영역에 놓기
+    }
+
+    /// 다른 앱에 놓았으면 그 앱을 앞으로 — 안 그러면 키보드가 패널에 남아 놓은 뒤 친 글자가 패널로 간다(윈도우판도 놓은 창을 앞으로).
+    func draggingSession(_ session: NSDraggingSession, endedAt screenPoint: NSPoint, operation: NSDragOperation) {
+        guard !operation.isEmpty, window?.frame.contains(screenPoint) == false,
+              let pid = Self.appPID(at: screenPoint), let app = NSRunningApplication(processIdentifier: pid) else { return }
+        // 놓은 앱이 이미 맨 앞 앱이면 activate만으로는 키보드가 패널에서 안 돌아온다(패널은 앱을 앞으로 안 부르는 창)
+        // → 패널을 잠깐 내렸다 키 없이 다시 띄워 키보드를 놓아 준다
+        if let w = window { w.orderOut(nil); w.orderFrontRegardless() }
+        let ok = app.activate()
+        // macOS 14+ 활성화는 양보식이라 거절될 수 있다 — 실제로 앞에 왔는지 남겨 둔다
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            StatusLog.append("panel drop-out activate \(app.bundleIdentifier ?? "\(pid)") ok=\(ok) front=\(NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "-")")
+        }
+    }
+
+    /// 화면 지점(Cocoa 전역)에서 맨 앞 일반 창(layer 0)의 앱. 내 창은 뺀다.
+    private static func appPID(at p: NSPoint) -> pid_t? {
+        guard let primaryHeight = NSScreen.screens.first?.frame.height,
+              let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else { return nil }
+        let cg = CGPoint(x: p.x, y: primaryHeight - p.y)
+        let myPid = ProcessInfo.processInfo.processIdentifier
+        for w in list {
+            guard (w[kCGWindowLayer as String] as? Int) == 0,
+                  let pid = w[kCGWindowOwnerPID as String] as? Int32, pid != myPid,
+                  let b = w[kCGWindowBounds as String] as? [String: CGFloat],
+                  CGRect(x: b["X"] ?? 0, y: b["Y"] ?? 0, width: b["Width"] ?? 0, height: b["Height"] ?? 0).contains(cg) else { continue }
+            return pid
+        }
+        return nil
     }
 
     private func snapshot() -> NSImage {

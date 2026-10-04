@@ -61,6 +61,14 @@ public final class PasteQueue {
         lock.withLock { _items }
     }
 
+    /// 패널에서 고른 항목들로 큐를 통째로 바꾼다(처음부터). 윈도우판 `set_queue`와 같이 마지막 복사 시각은 그대로 둔다.
+    public func replace(with items: [ClipItem]) {
+        lock.withLock {
+            _items = items
+            pointer = 0
+        }
+    }
+
     /// 일반 ⌘V(물리 키) — 큐를 비운다.
     public func markPlainPaste() { clear() }
 

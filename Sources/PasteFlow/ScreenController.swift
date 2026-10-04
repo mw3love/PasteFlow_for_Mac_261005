@@ -6,12 +6,14 @@ final class ScreenController {
     private let overlay = CaptureOverlay()
     private let paste: PasteController
     private let db: ClipDatabase?
+    private let monitor: ClipboardMonitor
     /// 마지막 캡처 — 같은 이미지를 핀하면 캡처한 자리에 띄운다.
     private var lastCapture: (png: Data, rect: NSRect)?
 
-    init(paste: PasteController, db: ClipDatabase?) {
+    init(paste: PasteController, db: ClipDatabase?, monitor: ClipboardMonitor) {
         self.paste = paste
         self.db = db
+        self.monitor = monitor
         overlay.onCapture = { [weak self] png, rect, mode in
             switch mode {
             case .capture: self?.didCapture(png, rect)
@@ -45,6 +47,7 @@ final class ScreenController {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
             let url = CaptureFiles.uniqueURL(in: folder)
             try png.write(to: url, options: .atomic)
+            monitor.attachSavedPath(url.path)
             StatusLog.append("capture saved \(url.path) rect=\(rect)")
             Toast.show("캡처됨", detail: url.lastPathComponent)
         } catch {

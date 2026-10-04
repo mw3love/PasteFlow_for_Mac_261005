@@ -98,6 +98,36 @@ public final class ClipDatabase {
         }
     }
 
+    /// 고정 항목 순서를 통째로 정한다(앞에서부터 1, 2, 3…).
+    public func setPinOrder(_ ids: [Int64]) throws {
+        try exec("BEGIN")
+        do {
+            for (i, id) in ids.enumerated() {
+                try run("UPDATE clip_items SET pin_order = ? WHERE id = ? AND is_pinned = 1", [i + 1, id])
+            }
+            try exec("COMMIT")
+        } catch {
+            try? exec("ROLLBACK")
+            throw error
+        }
+    }
+
+    /// 글자 수정 — 원본 형식(HTML·RTF 등)은 버리고 평문 하나로 바꾼다(윈도우판 `update_item_text`와 같음).
+    public func updateText(id: Int64, _ text: String) throws {
+        let formats = [ClipClassifier.plainText: Data(text.utf8)]
+        try exec("BEGIN")
+        do {
+            try run("UPDATE clip_items SET kind = ?, preview_text = ?, thumbnail = NULL WHERE id = ?",
+                    [ClipItem.Kind.text.rawValue, ClipClassifier.preview(formats: formats, kind: .text), id])
+            try run("DELETE FROM clip_formats WHERE item_id = ?", [id])
+            try run("INSERT INTO clip_formats (item_id, type, data) VALUES (?, ?, ?)", [id, ClipClassifier.plainText, formats[ClipClassifier.plainText]!])
+            try exec("COMMIT")
+        } catch {
+            try? exec("ROLLBACK")
+            throw error
+        }
+    }
+
     /// 글자 내용이 정확히 같은 항목을 지운다(고정 포함) — 비밀값이 히스토리에 남았을 때 정리용. 지운 id를 돌려준다.
     @discardableResult
     public func deleteItems(withPlainText text: String) throws -> [Int64] {

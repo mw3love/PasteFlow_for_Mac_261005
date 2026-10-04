@@ -67,6 +67,19 @@ final class PasteController {
         return try? tempStore.save(png: png, itemId: item.id)
     }
 
+    /// 패널에서 고른 항목들로 큐를 새로 지정한다(C). 다음 순차 붙여넣기부터 이 순서로.
+    func setQueue(_ items: [ClipItem]) {
+        bulkTimer?.invalidate()
+        bulkTimer = nil
+        queue.replace(with: items)
+        hud.dismiss()
+        notifyChanged()
+        StatusLog.append("queue set from panel ids=\(items.compactMap(\.id))")
+    }
+
+    /// 패널에서 큐 해제(C·메뉴).
+    func clearQueueFromPanel() { clearQueue(reason: "panel") }
+
     /// 히스토리에서 지운 항목을 큐에서도 빼고 HUD를 맞춘다.
     func removeFromQueue(id: Int64) {
         guard queue.remove(id: id) else { return }
