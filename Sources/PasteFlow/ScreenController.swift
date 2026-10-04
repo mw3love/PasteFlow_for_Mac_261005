@@ -40,7 +40,7 @@ final class ScreenController {
         let item = NSPasteboardItem()
         item.setData(png, forType: .png)
         pb.writeObjects([item])
-        ClipboardMonitor.noteAppWrite()
+        // 알림은 감시기의 복사 알림(Q배지+썸네일)으로 — 윈도우판도 캡처를 일반 복사와 같은 알림으로 통일
 
         let folderSetting = (try? db?.setting("capture_save_folder")) ?? nil
         let folder = folderSetting.map { URL(fileURLWithPath: $0) } ?? CaptureFiles.defaultFolder
@@ -50,7 +50,6 @@ final class ScreenController {
             try png.write(to: url, options: .atomic)
             monitor.attachSavedPath(url.path)
             StatusLog.append("capture saved \(url.path) rect=\(rect)")
-            Toast.show("캡처됨", detail: url.lastPathComponent)
         } catch {
             StatusLog.append("capture save FAILED: \(error)")
             Toast.show("캡처됨", detail: "파일 저장 실패 — 클립보드에는 있어요", always: true)

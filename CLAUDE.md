@@ -38,7 +38,7 @@ scripts/build.sh --no-run  # 실행 없이 설치만
   - 함정 3: 키 창이 아닌 패널의 첫 클릭은 창 깨우기로만 쓰여 항목이 mouseDown을 못 받는다 → 끌기가 안 시작됨. `ClipItemView.acceptsFirstMouse = true`.
   - 함정 4: 다른 앱에 놓아도 키보드는 패널에 남는다(앱을 앞으로 안 부르는 창) → `draggingSession(_:endedAt:operation:)`에서 놓은 지점의 맨 앞 창(layer 0) 앱을 `activate()`, 그 앱이 이미 맨 앞이면 이것만으론 안 돌아오므로 패널을 `orderOut` → `orderFrontRegardless`(키 없이)로 키보드를 놓아 줌. 패널은 안 닫음.
   - 2026-10-04 사용자 실조건검증: C 큐 지정·해제, O 파일 위치, 글자 수정, 고정 순서 끌기, 히스토리→고정 끌기, 비활성 패널에서 바로 끌기, 다른 앱에 놓은 뒤 바로 타자 모두 정상.
-- 캡처·핀(`ScreenController`): `⌘⇧2` → `ScreenSnapshot`(ScreenCaptureKit으로 모니터별 "얼린" 화면 + `CGWindowListCopyWindowInfo` 창 사각형·앱 pid, 실측 44~122ms) → `CaptureOverlay`(모니터마다 NSPanel, 요소·창 하이라이트 클릭 / 4pt 이상 끌면 자유 사각형 / 우클릭·Esc 취소 / Space 실제 커서 포함) → PNG(144dpi 기록)를 클립보드에 올려 **감시기가 일반 복사처럼** 히스토리·큐에 넣게 하고, `~/Pictures/PasteFlow/clip_YYYYMMDD_HHMMSS.png` 저장(설정 키 `capture_save_folder`로 바꿀 수 있음) + `Toast`. `⌘⇧1` → 큐에 다음이 있으면 그것(포인터 공유), 없으면 클립보드 이미지/글자(글자는 M1 카드 이미지로, 경로 붙여넣기 PNG 경로면 원본 복원). 마지막 캡처와 같은 이미지는 캡처한 자리에 핀.
+- 캡처·핀(`ScreenController`): `⌘⇧2` → `ScreenSnapshot`(ScreenCaptureKit으로 모니터별 "얼린" 화면 + `CGWindowListCopyWindowInfo` 창 사각형·앱 pid, 실측 44~122ms) → `CaptureOverlay`(모니터마다 NSPanel, 요소·창 하이라이트 클릭 / 4pt 이상 끌면 자유 사각형 / 우클릭·Esc 취소 / Space 실제 커서 포함) → PNG(144dpi 기록)를 클립보드에 올려 **감시기가 일반 복사처럼** 히스토리·큐에 넣게 하고, `~/Pictures/PasteFlow/clip_YYYYMMDD_HHMMSS.png` 저장(설정 키 `capture_save_folder`로 바꿀 수 있음). 알림은 복사 알림(Q배지+썸네일), 저장 실패만 따로. `⌘⇧1` → 큐에 다음이 있으면 그것(포인터 공유), 없으면 클립보드 이미지/글자(글자는 M1 카드 이미지로, 경로 붙여넣기 PNG 경로면 원본 복원). 마지막 캡처와 같은 이미지는 캡처한 자리에 핀.
   - `CGWindowListCreateImage`는 이 SDK(macOS 26)에서 **사용 불가**(컴파일 오류) → ScreenCaptureKit 필수.
   - 첫 캡처 때 맥이 "시스템 개인정보 보호 윈도우 선택기를 우회하여 화면에 직접 접근" 허용 창을 따로 띄운다(화면 기록 권한과 별개). 사용자가 허용함(2026-10-03). 다시 묻는 주기는 확인 필요.
   - 한계: 자유 드래그 선택은 시작한 모니터 안으로 한정(여러 모니터 걸침 합성 없음).
@@ -65,7 +65,7 @@ scripts/build.sh --no-run  # 실행 없이 설치만
   - 2026-10-03: 사용자 실조건검증 — 단축키를 바꾸면 재시작 없이 새 키로 동작. 자동 시작은 자체 서명 앱에서도 등록 성공(status=enabled), 실제 로그인 후 실행은 미확인(맥을 거의 안 꺼서 나중에 — 안 켜지면 그때 수정).
   - macOS 14+는 활성화가 양보식이라 `NSApp.activate`만으로는 설정창이 다른 앱 창 뒤에 남는다 → `orderFrontRegardless()`.
 - 알림(`Toast`): 주 모니터 오른쪽 아래에 최신이 맨 아래로 최대 5개 쌓임. `key`가 같으면 그 자리에서 바뀜(OCR 진행→결과). 알림을 꺼도 `always: true`(실패·OCR)는 뜬다.
-  - 복사 알림(`Toast.showCopy`, 윈도우판 `show_copy_toast`): 다른 앱에서 복사할 때 2초, 앞에 큐 개수 배지 `Q{n}` + 글자 30자(공백·줄바꿈 합침) 또는 이미지 썸네일(원본을 96×72로 줄여 그림). 캡처·OCR·주석 복사는 클립보드에 올린 뒤 `ClipboardMonitor.noteAppWrite()`를 불러 기록은 하되 복사 알림은 안 띄운다(자기 알림이 따로 있음).
+  - 복사 알림(`Toast.showCopy`, 윈도우판 `show_copy_toast`): 다른 앱에서 복사할 때 2초, 앞에 큐 개수 배지 `Q{n}` + 글자 30자(공백·줄바꿈 합침) 또는 이미지 썸네일(원본을 160×160 안으로 줄여 그림 — 윈도우판 96보다 크게, 사용자 요청). 그 밖의 크기는 윈도우판 `toast.py` 숫자 그대로(본문 18·배지 16·여백 24/18·간격 12, 2026-10-05 사용자 결정). 가운데 맞춤 가로 스택은 큰 썸네일 높이를 틀에 반영하지 않아 삐져나온다 → `fitHeight`. 캡처도 이 알림을 쓴다(윈도우판 `_on_capture_region`이 "캡처됨" 문구·파일명 없이 복사 알림으로 통일 — 처음엔 짐작으로 캡처를 막았다가 고침). OCR·주석 복사는 클립보드에 올린 뒤 `ClipboardMonitor.noteAppWrite()`를 불러 기록은 하되 복사 알림은 안 띄운다(자기 알림이 따로 있음 — 주석 복사 알림은 결과 썸네일 포함, 윈도우판과 같음).
   - 2026-10-04 사용자 실조건검증: 복사 알림·Q 누적, 캡처 때 겹치지 않음, 설정으로 끄기 정상(칸을 합치기 전 기준 — 합친 칸은 화면만 확인).
 - 한 번만 실행: 이미 떠 있으면 새 쪽이 분산 알림으로 설정창을 열게 하고 끝남. Finder에서 다시 열기(`applicationShouldHandleReopen`)도 설정창.
 - 자체 시험 함정: 이 맥의 사용자는 Chrome 전체 화면을 자주 띄워 두므로, 자동 키 입력 시험 중 맨 앞 창이 바뀌어 주입한 ⌘V가 엉뚱한 앱으로 갈 수 있다. 실제 붙는 결과는 사용자 직접 확인이 확실하다.

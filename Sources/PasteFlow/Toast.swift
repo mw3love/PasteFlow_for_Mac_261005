@@ -2,11 +2,12 @@ import AppKit
 import PasteFlowCore
 
 /// 우하단 짧은 알림(포커스 안 뺏음). 주 모니터 오른쪽 아래에 최신이 맨 아래로 쌓이고, 최대 5개(윈도우판 `toast.py`와 같은 규칙).
-/// 설정 "알림"을 끄면 확인 알림(캡처됨 등)만 숨긴다 — 실패와 OCR 진행·결과처럼 기다리는 알림은 `always`로 계속 뜬다.
+/// 설정 "알림"을 끄면 복사·확인 알림(주석 복사됨 등)을 숨긴다 — 실패와 OCR 진행·결과처럼 기다리는 알림은 `always`로 계속 뜬다.
 enum Toast {
     static let settingKey = "toast_enabled"
     static var enabled = true
-    static let copyDuration: TimeInterval = 2.0   // 윈도우판 COPY_TOAST_DURATION_MS
+    static let copyDuration: TimeInterval = 2.0
+    private static let thumbMax: CGFloat = 160   // 윈도우판 COPY_TOAST_DURATION_MS
     private static let maxCount = 5
 
     private final class Entry {
@@ -18,9 +19,10 @@ enum Toast {
     private static var entries: [Entry] = []
 
     /// `key`가 같은 알림이 떠 있으면 새로 쌓지 않고 그 자리에서 바꾼다(예: OCR 진행 → 결과).
-    static func show(_ title: String, detail: String? = nil, duration: TimeInterval = 1.8, key: String? = nil, always: Bool = false) {
+    static func show(_ title: String, detail: String? = nil, image: NSImage? = nil, duration: TimeInterval = 1.8,
+                     key: String? = nil, always: Bool = false) {
         guard enabled || always else { return }
-        present(duration: duration, key: key) { fill($0, title: title, detail: detail) }
+        present(duration: duration, key: key) { fill($0, title: title, detail: detail, image: image) }
     }
 
     /// 복사 알림 — 앞에 큐 개수 배지(Q3), 뒤에 글자 미리보기(30자) 또는 이미지 썸네일(윈도우판 `show_copy_toast`).
@@ -82,33 +84,39 @@ enum Toast {
         }
     }
 
-    private static func fill(_ p: NSPanel, title: String, detail: String?) {
+    private static func fill(_ p: NSPanel, title: String, detail: String?, image: NSImage?) {
         let box = p.contentView!
         box.subviews.forEach { $0.removeFromSuperview() }
 
         let t = NSTextField(labelWithString: title)
-        t.font = .systemFont(ofSize: 13, weight: .semibold)
+        t.font = .systemFont(ofSize: 18, weight: .semibold)   // 크기는 윈도우판 toast.py 숫자(2026-10-05 사용자 결정)
         t.textColor = Theme.coral
         var views: [NSView] = [t]
         if let detail {
             let d = NSTextField(labelWithString: detail)
-            d.font = .systemFont(ofSize: 12)
+            d.font = .systemFont(ofSize: 14)
             d.textColor = Theme.text2
             d.lineBreakMode = .byTruncatingMiddle
-            d.widthAnchor.constraint(lessThanOrEqualToConstant: 300).isActive = true
+            d.widthAnchor.constraint(lessThanOrEqualToConstant: 460).isActive = true
             views.append(d)
         }
-        let stack = NSStackView(views: views)
-        stack.orientation = .vertical
-        stack.alignment = .leading
-        stack.spacing = 2
-        stack.edgeInsets = NSEdgeInsets(top: 10, left: 14, bottom: 10, right: 14)
+        let texts = NSStackView(views: views)
+        texts.orientation = .vertical
+        texts.alignment = .leading
+        texts.spacing = 2
+        // 이미지가 있으면 글자 왼쪽에 썸네일(윈도우판 — 아이콘과 본문 사이)
+        let stack = NSStackView(views: [thumbnailView(image), texts].compactMap { $0 })
+        stack.orientation = .horizontal
+        stack.alignment = .centerY
+        stack.spacing = 12
+        stack.edgeInsets = NSEdgeInsets(top: 18, left: 24, bottom: 18, right: 24)
         stack.translatesAutoresizingMaskIntoConstraints = false
         box.addSubview(stack)
         NSLayoutConstraint.activate([
             stack.leadingAnchor.constraint(equalTo: box.leadingAnchor), stack.trailingAnchor.constraint(equalTo: box.trailingAnchor),
             stack.topAnchor.constraint(equalTo: box.topAnchor), stack.bottomAnchor.constraint(equalTo: box.bottomAnchor),
         ])
+        fitHeight(stack)
         box.layoutSubtreeIfNeeded()
         p.setContentSize(stack.fittingSize)
     }
@@ -118,57 +126,69 @@ enum Toast {
         box.subviews.forEach { $0.removeFromSuperview() }
 
         let b = NSTextField(labelWithString: badge)
-        b.font = .monospacedDigitSystemFont(ofSize: 12, weight: .bold)
+        b.font = .monospacedDigitSystemFont(ofSize: 16, weight: .bold)
         b.textColor = Theme.bg
         b.alignment = .center
         let pill = NSView()
         pill.wantsLayer = true
         pill.layer?.backgroundColor = Theme.coral.cgColor
-        pill.layer?.cornerRadius = 9
+        pill.layer?.cornerRadius = 12
         pill.translatesAutoresizingMaskIntoConstraints = false
         b.translatesAutoresizingMaskIntoConstraints = false
         pill.addSubview(b)
         NSLayoutConstraint.activate([
-            b.leadingAnchor.constraint(equalTo: pill.leadingAnchor, constant: 7),
-            b.trailingAnchor.constraint(equalTo: pill.trailingAnchor, constant: -7),
+            b.leadingAnchor.constraint(equalTo: pill.leadingAnchor, constant: 9),
+            b.trailingAnchor.constraint(equalTo: pill.trailingAnchor, constant: -9),
             b.centerYAnchor.constraint(equalTo: pill.centerYAnchor),
-            pill.heightAnchor.constraint(equalToConstant: 18),
+            pill.heightAnchor.constraint(equalToConstant: 24),
         ])
 
         var views: [NSView] = [pill]
-        if let image, image.size.width > 0, image.size.height > 0 {
-            // 최대 96×72pt, 비율 유지
-            let scale = min(96 / image.size.width, 72 / image.size.height, 1)
-            let iv = NSImageView(image: image)
-            iv.imageScaling = .scaleProportionallyUpOrDown
-            iv.wantsLayer = true
-            iv.layer?.cornerRadius = 4
-            iv.layer?.masksToBounds = true
-            iv.translatesAutoresizingMaskIntoConstraints = false
-            iv.widthAnchor.constraint(equalToConstant: max(1, (image.size.width * scale).rounded())).isActive = true
-            iv.heightAnchor.constraint(equalToConstant: max(1, (image.size.height * scale).rounded())).isActive = true
+        if let iv = thumbnailView(image) {
             views.append(iv)
         } else {
             let t = NSTextField(labelWithString: text)
-            t.font = .systemFont(ofSize: 12)
+            t.font = .systemFont(ofSize: 18)   // 30자로 이미 줄여서 폭 제한 없음(윈도우판과 같음)
             t.textColor = Theme.text
-            t.lineBreakMode = .byTruncatingTail
-            t.widthAnchor.constraint(lessThanOrEqualToConstant: 280).isActive = true
             views.append(t)
         }
         let stack = NSStackView(views: views)
         stack.orientation = .horizontal
         stack.alignment = .centerY
-        stack.spacing = 8
-        stack.edgeInsets = NSEdgeInsets(top: 9, left: 10, bottom: 9, right: 14)
+        stack.spacing = 12
+        stack.edgeInsets = NSEdgeInsets(top: 18, left: 24, bottom: 18, right: 24)
         stack.translatesAutoresizingMaskIntoConstraints = false
         box.addSubview(stack)
         NSLayoutConstraint.activate([
             stack.leadingAnchor.constraint(equalTo: box.leadingAnchor), stack.trailingAnchor.constraint(equalTo: box.trailingAnchor),
             stack.topAnchor.constraint(equalTo: box.topAnchor), stack.bottomAnchor.constraint(equalTo: box.bottomAnchor),
         ])
+        fitHeight(stack)
         box.layoutSubtreeIfNeeded()
         p.setContentSize(stack.fittingSize)
+    }
+
+    /// 가운데 맞춤 가로 스택은 가장 큰 칸(썸네일) 높이를 스택 높이에 넣지 않아 위아래로 삐져나온다 → 칸마다 "스택 ≥ 칸 + 위아래 여백".
+    private static func fitHeight(_ stack: NSStackView) {
+        let pad = stack.edgeInsets.top + stack.edgeInsets.bottom
+        for v in stack.arrangedSubviews {
+            stack.heightAnchor.constraint(greaterThanOrEqualTo: v.heightAnchor, constant: pad).isActive = true
+        }
+    }
+
+    /// 최대 160×160pt, 비율 유지한 썸네일(윈도우판 96보다 크게 — 2026-10-05 사용자 요청). 이미지가 없으면 nil.
+    private static func thumbnailView(_ image: NSImage?) -> NSView? {
+        guard let image, image.size.width > 0, image.size.height > 0 else { return nil }
+        let scale = min(thumbMax / image.size.width, thumbMax / image.size.height, 1)
+        let iv = NSImageView(image: image)
+        iv.imageScaling = .scaleProportionallyUpOrDown
+        iv.wantsLayer = true
+        iv.layer?.cornerRadius = 4
+        iv.layer?.masksToBounds = true
+        iv.translatesAutoresizingMaskIntoConstraints = false
+        iv.widthAnchor.constraint(equalToConstant: max(1, (image.size.width * scale).rounded())).isActive = true
+        iv.heightAnchor.constraint(equalToConstant: max(1, (image.size.height * scale).rounded())).isActive = true
+        return iv
     }
 
     private static func makePanel() -> NSPanel {
