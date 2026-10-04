@@ -32,7 +32,7 @@ scripts/build.sh --no-run  # 실행 없이 설치만
   - 함정 2: `isMovableByWindowBackground` 창에서 글자 칸(NSTextField)을 누르면 창 이동으로 처리된다 → 항목 뷰가 `hitTest`로 클릭을 직접 받고 `mouseDownCanMoveWindow = false`.
   - 2026-10-03 사용자 실조건검증: 선택·고정·삭제·미리보기·Enter 붙여넣기·우클릭·끌어다 놓기(글자·이미지, ⌥ 경로) 모두 정상.
   - 윈도우판에 있는데 아직 없는 것: 큐에 추가/해제(C), 고정 항목 드래그로 순서 바꾸기, 히스토리→고정 영역 드롭, 고정 글자 수정, 파일 위치 열기(캡처 항목 — 저장 경로를 DB `saved_image_path`에 아직 안 넣음).
-- 캡처·핀(`ScreenController`): `⌘⇧2` → `ScreenSnapshot`(ScreenCaptureKit으로 모니터별 "얼린" 화면 + `CGWindowListCopyWindowInfo` 창 사각형, 실측 44~122ms) → `CaptureOverlay`(모니터마다 NSPanel, 창 하이라이트 클릭 / 4pt 이상 끌면 자유 사각형 / 우클릭·Esc 취소 / Space 실제 커서 포함) → PNG(144dpi 기록)를 클립보드에 올려 **감시기가 일반 복사처럼** 히스토리·큐에 넣게 하고, `~/Pictures/PasteFlow/clip_YYYYMMDD_HHMMSS.png` 저장(설정 키 `capture_save_folder`로 바꿀 수 있음) + `Toast`. `⌘⇧1` → 큐에 다음이 있으면 그것(포인터 공유), 없으면 클립보드 이미지/글자(글자는 M1 카드 이미지로, 경로 붙여넣기 PNG 경로면 원본 복원). 마지막 캡처와 같은 이미지는 캡처한 자리에 핀.
+- 캡처·핀(`ScreenController`): `⌘⇧2` → `ScreenSnapshot`(ScreenCaptureKit으로 모니터별 "얼린" 화면 + `CGWindowListCopyWindowInfo` 창 사각형·앱 pid, 실측 44~122ms) → `CaptureOverlay`(모니터마다 NSPanel, 요소·창 하이라이트 클릭 / 4pt 이상 끌면 자유 사각형 / 우클릭·Esc 취소 / Space 실제 커서 포함) → PNG(144dpi 기록)를 클립보드에 올려 **감시기가 일반 복사처럼** 히스토리·큐에 넣게 하고, `~/Pictures/PasteFlow/clip_YYYYMMDD_HHMMSS.png` 저장(설정 키 `capture_save_folder`로 바꿀 수 있음) + `Toast`. `⌘⇧1` → 큐에 다음이 있으면 그것(포인터 공유), 없으면 클립보드 이미지/글자(글자는 M1 카드 이미지로, 경로 붙여넣기 PNG 경로면 원본 복원). 마지막 캡처와 같은 이미지는 캡처한 자리에 핀.
   - `CGWindowListCreateImage`는 이 SDK(macOS 26)에서 **사용 불가**(컴파일 오류) → ScreenCaptureKit 필수.
   - 첫 캡처 때 맥이 "시스템 개인정보 보호 윈도우 선택기를 우회하여 화면에 직접 접근" 허용 창을 따로 띄운다(화면 기록 권한과 별개). 사용자가 허용함(2026-10-03). 다시 묻는 주기는 확인 필요.
   - 한계: 자유 드래그 선택은 시작한 모니터 안으로 한정(여러 모니터 걸침 합성 없음).
