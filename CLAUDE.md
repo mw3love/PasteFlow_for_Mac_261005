@@ -3,6 +3,7 @@
 ## 프로젝트 개요
 
 윈도우용 PasteFlow(https://github.com/mw3love/Paste_flow)의 사용감을 맥에서 잇는 개인용 맥 앱. Swift 네이티브로 처음부터 만든다.
+저장소: https://github.com/mw3love/PasteFlow_for_Mac_261005 (공개, 커밋 작성자 `mw <7maker@gmail.com>` — 이 저장소 git 설정에 지정).
 목표·범위·제약·만드는 순서는 `PLAN.md`가 기준이다. 결정이 바뀌면 `PLAN.md`부터 고친다.
 
 ## 작업 규칙
