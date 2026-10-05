@@ -66,6 +66,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         AnnotationCanvas.settingsDB = db   // 주석 도구별 색·크기 기억
         screen = ScreenController(paste: paste, db: db, monitor: monitor)
         ElementSnapper.startWaking()
+        AppActions.copyItem = { [weak self] item in self?.panel?.copyItem(item) }
+        AppActions.copyPath = { [weak self] item in self?.paste.copyToClipboard(item, asPath: true) }
+        AppActions.ocr = { [weak self] png in self?.screen?.recognize(png) }
+        AppActions.editText = { [weak self] id in self?.panel?.editText(id) }
+        if let v = (try? db?.setting(ClipDatabase.historyMaxKey)) ?? nil, let n = Int(v) { try? db?.setHistoryMax(n) }
         keys.onScreenAction = { [weak self] action in self?.screen?.handle(action) }
         SettingsWindow.configure(db: db, keys: keys, queue: queue)   // 저장된 단축키·알림·큐 시간
         let ok = keys.start()

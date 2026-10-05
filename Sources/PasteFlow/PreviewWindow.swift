@@ -6,6 +6,7 @@ import PasteFlowCore
 final class PreviewWindow: NSPanel {
     private static var open: [PreviewWindow] = []
     private var image: NSImage?
+    private let item: ClipItem
 
     static func show(_ item: ClipItem, near anchor: NSRect) {
         let w = PreviewWindow(item: item)
@@ -23,13 +24,14 @@ final class PreviewWindow: NSPanel {
     }
 
     private init(item: ClipItem) {
+        self.item = item
         let content: NSView
         var size = NSSize(width: 420, height: 300)
         if item.kind == .image, let image = Self.image(item) {
             let vf = NSScreen.main?.visibleFrame.size ?? NSSize(width: 1200, height: 800)
             let fit = min(1, (vf.width * 0.6) / image.size.width, (vf.height * 0.6) / image.size.height)
             size = NSSize(width: max(200, image.size.width * fit), height: max(120, image.size.height * fit))
-            let iv = NSImageView(image: image)
+            let iv = MenuImageView(image: image)
             iv.imageScaling = .scaleProportionallyUpOrDown
             iv.frame = NSRect(origin: .zero, size: size)
             let scroll = NSScrollView()
@@ -43,8 +45,15 @@ final class PreviewWindow: NSPanel {
             content = scroll
         } else {
             let text = Self.text(item)
-            let scroll = NSTextView.scrollableTextView()
-            let tv = scroll.documentView as! NSTextView
+            let scroll = NSScrollView()
+            scroll.hasVerticalScroller = true
+            let tv = MenuTextView(frame: NSRect(origin: .zero, size: size))
+            tv.minSize = NSSize(width: 0, height: size.height)
+            tv.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+            tv.autoresizingMask = [.width]
+            tv.isVerticallyResizable = true
+            tv.textContainer?.widthTracksTextView = true
+            scroll.documentView = tv
             tv.string = text
             tv.isEditable = false
             tv.font = .systemFont(ofSize: 13)
@@ -65,6 +74,40 @@ final class PreviewWindow: NSPanel {
         collectionBehavior = [.fullScreenAuxiliary, .canJoinAllSpaces]
         contentView = content
         if item.kind == .image { image = Self.image(item) }
+        let menuProvider: () -> NSMenu? = { [weak self] in self?.contextMenu() }
+        (content as? NSScrollView).flatMap { $0.documentView as? MenuImageView }?.menuProvider = menuProvider
+        (content as? NSScrollView).flatMap { $0.documentView as? MenuTextView }?.menuProvider = menuProvider
+    }
+
+    /// 윈도우판 미리보기 메뉴 — 이미지: 복사·경로·OCR·복제·주석 편집·닫기 / 글자: 전체 복사·수정·닫기.
+    private func contextMenu() -> NSMenu {
+        let m = NSMenu()
+        let item = self.item
+        if let image {
+            m.addItem(MenuAction("복사", key: "c", mods: .command) { AppActions.copyItem?(item) })
+            m.addItem(MenuAction("파일로 저장 후 경로 복사") { AppActions.copyPath?(item) })
+            m.addItem(.separator())
+            m.addItem(MenuAction("텍스트 추출(OCR)") { if let png = PasteController.pngData(item) { AppActions.ocr?(png) } })
+            m.addItem(.separator())
+            m.addItem(MenuAction("복제") { [weak self] in PreviewWindow.show(item, near: self?.frame ?? .zero) })
+            m.addItem(MenuAction("주석 편집", key: " ") { [weak self] in
+                guard let self else { return }
+                PinWindow.show(image: image, pixelScale: 1, at: self.frame, edit: true)
+                self.close()
+            })
+        } else {
+            m.addItem(MenuAction("전체 복사") { AppActions.copyItem?(item) })
+            let edit = MenuAction("수정") { [weak self] in
+                guard let id = item.id else { return }
+                self?.close()   // 고친 뒤엔 옛 내용이므로 닫는다
+                AppActions.editText?(id)
+            }
+            edit.isEnabled = item.id != nil && [.text, .html, .rtf].contains(item.kind)
+            m.addItem(edit)
+        }
+        m.addItem(.separator())
+        m.addItem(MenuAction("닫기", key: "\u{1b}") { [weak self] in self?.close() })
+        return m
     }
 
     override func keyDown(with event: NSEvent) {
@@ -103,4 +146,15 @@ final class PreviewWindow: NSPanel {
         if let d = item.formats[ClipClassifier.plainText], let s = String(data: d, encoding: .utf8) { return s }
         return item.previewText
     }
+}
+
+/// 우클릭 메뉴를 바꿔 끼울 수 있는 미리보기 뷰들(글자 칸 기본 메뉴 대신 윈도우판 미리보기 메뉴).
+private final class MenuImageView: NSImageView {
+    var menuProvider: (() -> NSMenu?)?
+    override func menu(for event: NSEvent) -> NSMenu? { menuProvider?() }
+}
+
+private final class MenuTextView: NSTextView {
+    var menuProvider: (() -> NSMenu?)?
+    override func menu(for event: NSEvent) -> NSMenu? { menuProvider?() ?? super.menu(for: event) }
 }

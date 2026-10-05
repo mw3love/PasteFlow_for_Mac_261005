@@ -163,7 +163,7 @@ final class PasteController {
         monitor.noteSelfChange()
     }
 
-    private static func pngData(_ item: ClipItem) -> Data? {
+    static func pngData(_ item: ClipItem) -> Data? {
         if let png = item.formats["public.png"] { return png }
         for t in ClipClassifier.imageTypes {
             if let d = item.formats[t], let rep = NSBitmapImageRep(data: d) {

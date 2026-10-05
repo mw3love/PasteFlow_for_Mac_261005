@@ -1,4 +1,5 @@
 import AppKit
+import PasteFlowCore
 
 /// 화면 핀(⌘⇧1) — 이미지를 원본 크기(1:1)로 화면 위에 띄워 둔다. 여러 개 가능.
 /// 끌어서 이동, 휠·핀치로 크기 조절, 더블클릭·Esc로 닫기. 포커스는 빼앗지 않는다.
@@ -58,6 +59,7 @@ final class PinWindow: NSPanel {
         }
         canvas.onCopy = { [weak self] in self?.copyResult() }
         canvas.onStateChange = { [weak self] in self?.toolBar.refresh() }
+        canvas.onMenu = { [weak self] in self?.contextMenu() }
         makeFirstResponder(canvas)
     }
 
@@ -134,6 +136,53 @@ final class PinWindow: NSPanel {
         StatusLog.append("annotation copied items=\(canvas.doc.items.count) bytes=\(png.count)")
         Toast.show("주석 이미지 복사됨", detail: "히스토리·큐에 들어가요", image: NSImage(data: png))
         setEditing(false)
+    }
+
+    // MARK: 우클릭 메뉴(윈도우판 핀 메뉴 순서 — 복사·경로·OCR·복제·주석 편집·닫기, 주석이 있으면 입힌 결과 기준)
+
+    private func contextMenu() -> NSMenu {
+        let m = NSMenu()
+        m.addItem(MenuAction("복사", key: "c", mods: .command) { [weak self] in self?.copyFlattened() })
+        m.addItem(MenuAction("파일로 저장 후 경로 복사") { [weak self] in
+            if let png = self?.flattenedPNG() { AppActions.copyPath?(Self.item(png)) } })
+        m.addItem(.separator())
+        m.addItem(MenuAction("텍스트 추출(OCR)") { [weak self] in
+            if let png = self?.flattenedPNG() { AppActions.ocr?(png) } })
+        m.addItem(.separator())
+        m.addItem(MenuAction("복제") { [weak self] in self?.duplicate() })
+        m.addItem(MenuAction("주석 편집", key: " ") { [weak self] in self?.setEditing(true) })
+        m.addItem(.separator())
+        m.addItem(MenuAction("닫기", key: "\u{1b}") { [weak self] in self?.close() })
+        return m
+    }
+
+    /// 주석을 입힌 원본 해상도 PNG(주석이 없으면 원본 그대로).
+    private func flattenedPNG() -> Data? {
+        canvas.commitText()
+        return AnnotationRenderer.renderPNG(image: canvas.image, items: canvas.doc.items)
+    }
+
+    private static func item(_ png: Data) -> ClipItem {
+        ClipItem(kind: .image, formats: ["public.png": png], previewText: "이미지")
+    }
+
+    /// 일반 복사처럼 클립보드에 올린다 — 감시기가 히스토리·큐에 넣고 복사 알림을 띄운다(윈도우판 핀 복사 = 일반 복사).
+    private func copyFlattened() {
+        guard let png = flattenedPNG() else { return }
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        let item = NSPasteboardItem()
+        item.setData(png, forType: .png)
+        pb.writeObjects([item])
+        StatusLog.append("pin copy bytes=\(png.count)")
+    }
+
+    /// 같은 내용(주석 입힌 결과)의 핀을 조금 비켜서 하나 더.
+    private func duplicate() {
+        guard let png = flattenedPNG(), let img = NSImage(data: png), img.size.width > 0 else { return }
+        let r = imageScreenRect
+        let scale = img.size.width / r.width   // 지금 보이는 크기 그대로
+        PinWindow.show(image: img, pixelScale: scale, at: r.offsetBy(dx: 24, dy: -24))
     }
 
     override func close() {

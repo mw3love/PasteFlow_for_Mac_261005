@@ -26,7 +26,9 @@ final class ClipPanelController: NSObject {
     private var itemViews: [Int64: ClipItemView] = [:]
     private var selectedId: Int64?
     private var collapsed: Set<String> = []
+    /// 📌 켜짐 = 항상 위에 + 안 닫힘, 꺼짐 = 다른 곳을 누르면 자동으로 닫힘(윈도우판 📌 자동 닫기). 다음 실행에도 기억.
     private var alwaysOnTop = true
+    static let pinnedKey = "panel_pinned"
 
     init(db: ClipDatabase, queue: PasteQueue, paste: PasteController) {
         self.db = db
@@ -36,6 +38,10 @@ final class ClipPanelController: NSObject {
         super.init()
         buildUI()
         NotificationCenter.default.addObserver(self, selector: #selector(stateChanged), name: .pasteFlowStateChanged, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(panelResignedKey), name: NSWindow.didResignKeyNotification, object: window)
+        alwaysOnTop = ((try? db.setting(Self.pinnedKey)) ?? nil) != "0"
+        window.level = alwaysOnTop ? .floating : .normal
+        updatePinButton()
     }
 
     var isVisible: Bool { window.isVisible }
@@ -52,6 +58,8 @@ final class ClipPanelController: NSObject {
             window.setFrameOrigin(NSPoint(x: vf.maxX - Self.defaultSize.width - 24, y: vf.maxY - Self.defaultSize.height - 24))
         }
         window.makeKeyAndOrderFront(nil)
+        // 📌 꺼짐이면 일반 창 높이라, 앱이 활성화되지 않은 채로는 다른 앱 창 뒤에 뜬다 → 단축키로 부르면 항상 맨 앞에
+        window.orderFrontRegardless()
         window.makeFirstResponder(window.contentView)
         StatusLog.append("panel show isKey=\(window.isKeyWindow) history=\(historyItems.count) pinned=\(pinnedItems.count)")
     }
@@ -305,7 +313,17 @@ final class ClipPanelController: NSObject {
         return item.formats[ClipClassifier.plainText].flatMap { String(data: $0, encoding: .utf8) } ?? ""
     }
 
-    private func editText(_ id: Int64) {
+    /// 패널에서 복사(⌘C·메뉴·미리보기) — 윈도우판 `_on_copy_item`: 클립보드 + 큐에 추가 + 히스토리 맨 위 + 복사 알림.
+    func copyItem(_ item: ClipItem) {
+        paste.copyToClipboard(item)          // 앱이 쓴 클립보드라 감시기는 다시 기록하지 않는다
+        queue.add(item)
+        if let id = item.id { try? db.bumpToTop(id: id) }
+        paste.didCopy()                       // HUD 정리 + 패널 다시 그리기
+        Toast.showCopy(item, queueCount: queue.status.total)
+        StatusLog.append("panel copy id=\(item.id ?? 0) queue=\(queue.status.pointer)/\(queue.status.total)")
+    }
+
+    func editText(_ id: Int64) {
         guard let text = editableText(id) else { return }
         TextEditWindow.show(text: text, near: window.frame) { [weak self] new in
             guard let self, new != text else { return }
@@ -318,14 +336,30 @@ final class ClipPanelController: NSObject {
 
     // MARK: 끌어서 고정 순서 바꾸기·고정
 
-    /// 패널 안 끌기 위치 → 고정 영역이면 (표시할 선의 y, 이 항목 앞 — nil은 맨 뒤). 히스토리 영역이면 nil.
-    fileprivate func pinDropTarget(at p: NSPoint) -> (lineY: CGFloat, before: Int64?)? {
+    struct DropTarget { let lineY: CGFloat; let toPinned: Bool; let before: Int64? }
+
+    /// 패널 안 끌기 위치 → 놓을 자리(표시할 선의 y, 영역, 이 항목 앞 — nil은 맨 뒤).
+    /// 고정 영역: 고정 항목은 순서 바꾸기, 히스토리 항목은 그 자리에 고정. 히스토리 영역: 히스토리 항목만 순서 바꾸기(윈도우판과 같음).
+    fileprivate func dropTarget(at p: NSPoint, dragging id: Int64) -> DropTarget? {
         guard let sep = pinnedSeparator else { return nil }
         let sepY = sep.convert(sep.bounds, to: doc).minY
-        guard p.y < sepY else { return nil }   // 뒤집힌 좌표: 위쪽이 작은 y
-        let rows = pinnedItems.compactMap(\.id).compactMap { id in itemViews[id].map { (id, $0.convert($0.bounds, to: doc)) } }
-        for (id, r) in rows where p.y < r.midY { return (r.minY - 3, id) }
-        return (rows.last.map { $0.1.maxY + 3 } ?? sepY - 4, nil)
+        let toPinned = p.y < sepY   // 뒤집힌 좌표: 위쪽이 작은 y
+        let isPinned = pinnedItems.contains { $0.id == id }
+        if !toPinned && isPinned { return nil }
+        let ids = (toPinned ? pinnedItems : historyItems).compactMap(\.id)
+        let rows = ids.compactMap { id in itemViews[id].map { (id, $0.convert($0.bounds, to: doc)) } }
+        if !toPinned && rows.isEmpty { return nil }   // 접혀 있거나 비어 있음
+        for (rid, r) in rows where p.y < r.midY { return DropTarget(lineY: r.minY - 3, toPinned: toPinned, before: rid) }
+        let end = rows.last.map { $0.1.maxY + 3 } ?? sepY - 4
+        return DropTarget(lineY: end, toPinned: toPinned, before: nil)
+    }
+
+    fileprivate func drop(_ id: Int64, on t: DropTarget) {
+        if t.toPinned { dropOnPinned(id, before: t.before); return }
+        try? db.setHistoryOrder(PinOrder.moving(id, before: t.before, in: historyItems.compactMap(\.id)))
+        StatusLog.append("panel history reorder id=\(id) before=\(t.before.map(String.init) ?? "end")")
+        reload()
+        select(id)
     }
 
     /// 고정 항목은 그 자리로 옮기고, 히스토리 항목은 그 자리에 고정한다.
@@ -375,7 +409,7 @@ final class ClipPanelController: NSObject {
         default: break
         }
         if mods.contains(.command), e.charactersIgnoringModifiers == "c", let id = selectedId, let item = full(id) {
-            paste.copyToClipboard(item)
+            copyItem(item)
             return true
         }
         if mods.isEmpty, e.keyCode == 35, let id = selectedId {             // P
@@ -405,7 +439,7 @@ final class ClipPanelController: NSObject {
             if inQueue { self?.paste.clearQueueFromPanel() } else { self?.selectQueue(id) } })
         m.addItem(.separator())
         m.addItem(MenuAction("복사", key: "c", mods: .command) { [weak self] in
-            if let item = self?.full(id) { self?.paste.copyToClipboard(item) } })
+            if let item = self?.full(id) { self?.copyItem(item) } })
         if isImage {
             m.addItem(MenuAction("파일로 저장 후 경로 복사") { [weak self] in
                 if let item = self?.full(id) { self?.paste.copyToClipboard(item, asPath: true) } })
@@ -414,6 +448,10 @@ final class ClipPanelController: NSObject {
         let open = MenuAction("파일 위치 열기", key: "o") { [weak self] in self?.openFileLocation(id) }
         open.isEnabled = fileURL(id) != nil
         m.addItem(open)
+        let ocr = MenuAction("텍스트 추출(OCR)") { [weak self] in
+            if let item = self?.full(id), let png = PasteController.pngData(item) { AppActions.ocr?(png) } }
+        ocr.isEnabled = isImage
+        m.addItem(ocr)
         let editItem = MenuAction("수정") { [weak self] in self?.editText(id) }
         editItem.isEnabled = !isImage && editableText(id) != nil
         m.addItem(editItem)
@@ -459,21 +497,35 @@ final class ClipPanelController: NSObject {
     @objc private func togglePin() {
         alwaysOnTop.toggle()
         window.level = alwaysOnTop ? .floating : .normal
+        try? db.setSetting(Self.pinnedKey, alwaysOnTop ? "1" : "0")
         updatePinButton()
     }
 
     private func updatePinButton() {
         pinButton.contentTintColor = alwaysOnTop ? Theme.coral : Theme.secondary
-        pinButton.toolTip = alwaysOnTop ? "항상 위에: 켜짐" : "항상 위에: 꺼짐"
+        pinButton.toolTip = alwaysOnTop ? "고정: 켜짐 (항상 위에, 안 닫힘)" : "고정: 꺼짐 (다른 곳을 누르면 닫힘)"
     }
 
     @objc private func closeClicked() { hide() }
+
+    /// 📌 꺼짐일 때 다른 곳을 누르면 닫는다. 미리보기·수정 창·핀으로 옮겨 간 경우, 확인 창, 다른 앱에 끌어다 놓은 직후는 예외(윈도우판 `changeEvent`).
+    @objc private func panelResignedKey() {
+        guard !alwaysOnTop, window.isVisible, !window.suppressAutoClose else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.window.isVisible, !self.window.isKeyWindow, NSApp.modalWindow == nil else { return }
+            if let k = NSApp.keyWindow, k is PreviewWindow || k is TextEditWindow || k is PinWindow { return }
+            StatusLog.append("panel auto close")
+            self.hide()
+        }
+    }
 }
 
 // MARK: - 창
 
 final class ClipPanelWindow: NSPanel {
     var keyHandler: ((NSEvent) -> Bool)?
+    /// 다른 앱에 끌어다 놓은 직후 키보드를 놓아 줄 때는 자동 닫기를 하지 않는다.
+    var suppressAutoClose = false
 
     init(contentRect: NSRect) {
         super.init(contentRect: contentRect, styleMask: [.borderless, .nonactivatingPanel, .resizable],
@@ -517,7 +569,7 @@ extension NSPasteboard.PasteboardType {
     static let pasteFlowItem = NSPasteboard.PasteboardType("com.minwoo.pasteflow.item-id")
 }
 
-/// 패널 목록 바탕 — 항목을 고정 영역에 끌어 놓으면 순서 바꾸기·고정. 놓일 자리에 코랄 선을 그린다.
+/// 패널 목록 바탕 — 항목을 끌어 놓으면 고정 순서 바꾸기·고정·히스토리 순서 바꾸기. 놓일 자리에 코랄 선을 그린다.
 final class PanelListView: NSView {
     weak var controller: ClipPanelController?
     override var isFlipped: Bool { true }
@@ -530,16 +582,17 @@ final class PanelListView: NSView {
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
-    private func target(_ info: NSDraggingInfo) -> (lineY: CGFloat, before: Int64?)? {
-        guard info.draggingPasteboard.string(forType: .pasteFlowItem) != nil else { return nil }
-        return controller?.pinDropTarget(at: convert(info.draggingLocation, from: nil))
+    private func target(_ info: NSDraggingInfo) -> (id: Int64, target: ClipPanelController.DropTarget)? {
+        guard let s = info.draggingPasteboard.string(forType: .pasteFlowItem), let id = Int64(s),
+              let t = controller?.dropTarget(at: convert(info.draggingLocation, from: nil), dragging: id) else { return nil }
+        return (id, t)
     }
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation { draggingUpdated(sender) }
 
     override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
         let t = target(sender)
-        lineY = t?.lineY
+        lineY = t?.target.lineY
         return t == nil ? [] : .move
     }
 
@@ -547,10 +600,9 @@ final class PanelListView: NSView {
 
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
         defer { lineY = nil }
-        guard let t = target(sender), let s = sender.draggingPasteboard.string(forType: .pasteFlowItem),
-              let id = Int64(s) else { return false }
+        guard let t = target(sender) else { return false }
         // 놓기 처리 중 목록을 다시 그리면 끌기 세션이 지운 뷰를 붙잡는다 → 다음 차례에
-        DispatchQueue.main.async { [weak controller] in controller?.dropOnPinned(id, before: t.before) }
+        DispatchQueue.main.async { [weak controller] in controller?.drop(t.id, on: t.target) }
         return true
     }
 
@@ -710,7 +762,12 @@ final class ClipItemView: NSView, NSDraggingSource {
               let pid = Self.appPID(at: screenPoint), let app = NSRunningApplication(processIdentifier: pid) else { return }
         // 놓은 앱이 이미 맨 앞 앱이면 activate만으로는 키보드가 패널에서 안 돌아온다(패널은 앱을 앞으로 안 부르는 창)
         // → 패널을 잠깐 내렸다 키 없이 다시 띄워 키보드를 놓아 준다
-        if let w = window { w.orderOut(nil); w.orderFrontRegardless() }
+        if let w = window as? ClipPanelWindow {
+            w.suppressAutoClose = true
+            w.orderOut(nil)
+            w.orderFrontRegardless()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { w.suppressAutoClose = false }
+        }
         let ok = app.activate()
         // macOS 14+ 활성화는 양보식이라 거절될 수 있다 — 실제로 앞에 왔는지 남겨 둔다
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {

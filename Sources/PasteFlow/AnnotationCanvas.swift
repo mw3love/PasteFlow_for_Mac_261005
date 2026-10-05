@@ -131,6 +131,8 @@ final class AnnotationCanvas: NSView, NSTextViewDelegate {
     var onCopy: (() -> Void)?
     /// 도구 막대 갱신(도구·선택·되돌리기 상태가 바뀔 때).
     var onStateChange: (() -> Void)?
+    /// 우클릭 메뉴(편집 중이 아닐 때 — 핀 메뉴).
+    var onMenu: (() -> NSMenu?)?
 
     var editing = false {
         didSet {
@@ -281,6 +283,8 @@ final class AnnotationCanvas: NSView, NSTextViewDelegate {
     }
 
     // MARK: 마우스
+
+    override func menu(for event: NSEvent) -> NSMenu? { editing ? nil : onMenu?() }
 
     override func mouseDown(with event: NSEvent) {
         guard editing else {

@@ -43,6 +43,8 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate {
     private let loginStatus = NSTextField(labelWithString: "")
     private let idleField = NSTextField()
     private let idleStepper = NSStepper()
+    private let historyField = NSTextField()
+    private let historyStepper = NSStepper()
     private let folderLabel = NSTextField(labelWithString: "")
     private let toastCheck = NSButton(checkboxWithTitle: "알림 보이기 (복사·캡처·주석 복사)", target: nil, action: nil)
     // 단축키
@@ -99,6 +101,9 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate {
         let idle = Int(Self.queue?.idleResetSec ?? PasteQueue.defaultIdleResetSec)
         idleField.integerValue = idle
         idleStepper.integerValue = idle
+        let hmax = Self.db?.historyMax ?? ClipDatabase.defaultHistoryMax
+        historyField.integerValue = hmax
+        historyStepper.integerValue = hmax
         // 캡처 폴더
         folderLabel.stringValue = Self.captureFolder.path.replacingOccurrences(of: NSHomeDirectory(), with: "~")
         toastCheck.state = Toast.enabled ? .on : .off
@@ -153,12 +158,25 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate {
 
         let idleRow = NSStackView(views: [idleField, idleStepper, NSTextField(labelWithString: "초")])
         idleRow.spacing = 4
+        // 히스토리 최대 개수(윈도우판 10~500, 고정 제외)
+        historyField.formatter = { let f = NumberFormatter(); f.minimum = 10; f.maximum = 500; f.allowsFloats = false; return f }()
+        historyField.target = self
+        historyField.action = #selector(historyChanged(_:))
+        historyField.widthAnchor.constraint(equalToConstant: 56).isActive = true
+        historyStepper.minValue = 10
+        historyStepper.maxValue = 500
+        historyStepper.increment = 10
+        historyStepper.target = self
+        historyStepper.action = #selector(historyChanged(_:))
+        let historyRow = NSStackView(views: [historyField, historyStepper, NSTextField(labelWithString: "개 (고정메모 제외)")])
+        historyRow.spacing = 4
         let folderRow = NSStackView(views: [folderLabel, NSButton(title: "선택…", target: self, action: #selector(chooseFolder)),
                                             NSButton(title: "열기", target: self, action: #selector(openFolder)),
                                             NSButton(title: "기본값", target: self, action: #selector(resetFolder))])
         let grid = NSGridView(views: [
             [label("시작"), loginCheck],
             [NSGridCell.emptyContentView, small(loginStatus)],
+            [label("히스토리"), historyRow],
             [label("새 묶음"), idleRow],
             [NSGridCell.emptyContentView, small(NSTextField(labelWithString: "마지막 복사 후 이 시간이 지나 다시 복사하면 큐를 새로 시작해요"))],
             [label("캡처 저장"), folderRow],
@@ -195,6 +213,16 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate {
         loginCheck.state = status == .enabled || status == .requiresApproval ? .on : .off
         loginStatus.stringValue = Self.describe(status)
         if status == .requiresApproval { SMAppService.openSystemSettingsLoginItems() }
+    }
+
+    @objc private func historyChanged(_ sender: NSControl) {
+        let v = min(max(sender.integerValue, 10), 500)
+        historyField.integerValue = v
+        historyStepper.integerValue = v
+        guard v != Self.db?.historyMax else { return }
+        try? Self.db?.setHistoryMax(v)   // 줄이면 넘치는 오래된 항목을 바로 지운다
+        try? Self.db?.setSetting(ClipDatabase.historyMaxKey, String(v))
+        NotificationCenter.default.post(name: .pasteFlowStateChanged, object: nil)
     }
 
     @objc private func idleChanged(_ sender: NSControl) {

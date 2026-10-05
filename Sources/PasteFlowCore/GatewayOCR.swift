@@ -184,6 +184,7 @@ public enum GatewayOCR {
     /// 실제 호출(폴백 포함). 돌려준 모델은 실제로 쓴 모델. `fallback`이 nil이면 폴백 없이 한 번만(연결 테스트용).
     public static func recognize(png: Data, baseURL: String, apiKey: String, model: String, fallback: String?,
                                  session: URLSession = .shared) async -> (Result<String, Failure>, String) {
+        let png = OCRImagePrep.padIfSmall(png)   // 얇은 캡처는 여백을 붙여야 낱자 띄어쓰기 결과가 안 나온다
         var tried: [String] = []
         for m in [model] + (fallback.map { [$0] } ?? []) where !tried.contains(m) {
             tried.append(m)

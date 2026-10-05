@@ -58,7 +58,7 @@ final class ScreenController {
 
     // MARK: OCR
 
-    private func recognize(_ png: Data) {
+    func recognize(_ png: Data) {
         guard let key = OCRSettings.apiKey else {
             Toast.show("OCR 실패", detail: GatewayOCR.Failure.missingKey.description, duration: 3, always: true)
             return

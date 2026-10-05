@@ -34,10 +34,15 @@ scripts/build.sh --no-run  # 실행 없이 설치만
   - 큐 지정(C, Core `QueueSelection` — 윈도우판 `_on_queue_select`): 히스토리는 고른 것→최신, 고정은 고른 것→첫 고정(역순). 큐 맨 앞 항목에서 다시 C = 해제. 윈도우판과 달리 지정 뒤 선택 표시를 지우지 않음(같은 항목에서 C로 바로 해제하려고).
   - 파일 위치 열기(O): 이미지 = 캡처 저장 파일(`saved_image_path` — `ScreenController`가 저장 후 `ClipboardMonitor.attachSavedPath`로 그 changeCount 항목에 붙임), Finder 복사 = 그 파일, 글자 = 경로 글자일 때. 이 기능 전 캡처는 경로가 없어 비활성.
   - 글자 수정(`ClipDatabase.updateText`): 원본 형식(HTML·RTF)을 버리고 평문 하나로(윈도우판과 같음).
-  - 끌기: 끌기 항목에 내부 형식(`.pasteFlowItem` = id)을 같이 실어, 패널 안 고정 영역(`PanelListView`, 구분선 위)에 놓으면 고정 순서 바꾸기(Core `PinOrder` + `setPinOrder`)·히스토리는 그 자리에 고정. 히스토리 순서 바꾸기는 없음(윈도우판엔 있음). 윈도우판의 "히스토리→고정 드롭"은 코드만 있고 실제 끌기 방식에선 안 걸리는 것으로 보여(추정) 맥판은 위처럼 정함.
+  - 끌기: 끌기 항목에 내부 형식(`.pasteFlowItem` = id)을 같이 실어, 패널 안 고정 영역(`PanelListView`, 구분선 위)에 놓으면 고정 순서 바꾸기(Core `PinOrder` + `setPinOrder`)·히스토리는 그 자리에 고정. 히스토리 영역에 놓으면 히스토리 순서 바꾸기(`setHistoryOrder`, 고정 항목은 히스토리로 못 감 — 윈도우판과 같음). 윈도우판의 "히스토리→고정 드롭"은 코드만 있고 실제 끌기 방식에선 안 걸리는 것으로 보여(추정) 맥판은 위처럼 정함.
   - 함정 3: 키 창이 아닌 패널의 첫 클릭은 창 깨우기로만 쓰여 항목이 mouseDown을 못 받는다 → 끌기가 안 시작됨. `ClipItemView.acceptsFirstMouse = true`.
   - 함정 4: 다른 앱에 놓아도 키보드는 패널에 남는다(앱을 앞으로 안 부르는 창) → `draggingSession(_:endedAt:operation:)`에서 놓은 지점의 맨 앞 창(layer 0) 앱을 `activate()`, 그 앱이 이미 맨 앞이면 이것만으론 안 돌아오므로 패널을 `orderOut` → `orderFrontRegardless`(키 없이)로 키보드를 놓아 줌. 패널은 안 닫음.
   - 2026-10-04 사용자 실조건검증: C 큐 지정·해제, O 파일 위치, 글자 수정, 고정 순서 끌기, 히스토리→고정 끌기, 비활성 패널에서 바로 끌기, 다른 앱에 놓은 뒤 바로 타자 모두 정상.
+  - 패널 복사(⌘C·메뉴·미리보기 복사, `ClipPanelController.copyItem` — 윈도우판 `_on_copy_item`): 클립보드 + 큐에 추가 + 히스토리 맨 위(`bumpToTop`) + 복사 알림. 히스토리 표시 순서는 DB `history_order`(작을수록 위, 새 복사 = MIN-1, 옛 DB는 시작 시 `-id`로 채움). 넘칠 때 지우는 건 표시 순서가 아니라 오래 복사된 것(id 순)부터 — 윈도우판과 같음.
+  - 우클릭 메뉴: 패널 이미지 "텍스트 추출(OCR)", 핀(`PinWindow.contextMenu` — 복사·경로·OCR·복제·주석 편집·닫기, 주석 입힌 결과 기준, 편집 중엔 안 뜸), 미리보기(이미지는 핀과 같음, 글자는 전체 복사·수정·닫기). 창끼리 같이 쓰는 동작은 `AppActions`(AppDelegate가 연결). 핀 복사는 일반 복사처럼 감시기가 기록(복사 알림).
+  - 📌 = 윈도우판 "자동 닫기" 버튼: 켜짐 = 항상 위에·안 닫힘, 꺼짐 = 패널이 키를 잃으면 닫힘(미리보기·수정 창·핀으로 옮길 때, 확인 창, 다른 앱에 놓은 직후 `suppressAutoClose`는 예외). DB `panel_pinned`(기본 켜짐 — 윈도우판 코드 기본은 자동 닫기 켜짐이지만, 패널을 띄워 두고 쓰는 사용 방식이라 맥은 켜짐). 📌 꺼짐(일반 창 높이)에서도 단축키로 열면 `orderFrontRegardless`로 맨 앞.
+  - 설정 일반 "히스토리 N개"(10~500, DB `history_max` — 윈도우판과 같은 키). 줄이면 넘치는 항목을 바로 지운다.
+  - 2026-10-05 사용자 실조건검증: 우클릭 OCR·핀/미리보기 메뉴, 패널 복사, 히스토리 끌기·개수, 📌 자동 닫기, 📌 꺼짐에서 단축키로 맨 앞 표시 정상.
 - 캡처·핀(`ScreenController`): `⌘⇧2` → `ScreenSnapshot`(ScreenCaptureKit으로 모니터별 "얼린" 화면 + `CGWindowListCopyWindowInfo` 창 사각형·앱 pid, 실측 44~122ms) → `CaptureOverlay`(모니터마다 NSPanel, 요소·창 하이라이트 클릭 / 4pt 이상 끌면 자유 사각형 / 우클릭·Esc 취소 / Space 실제 커서 포함) → PNG(144dpi 기록)를 클립보드에 올려 **감시기가 일반 복사처럼** 히스토리·큐에 넣게 하고, `~/Pictures/PasteFlow/clip_YYYYMMDD_HHMMSS.png` 저장(설정 키 `capture_save_folder`로 바꿀 수 있음). 알림은 복사 알림(Q배지+썸네일), 저장 실패만 따로. `⌘⇧1` → 큐에 다음이 있으면 그것(포인터 공유), 없으면 클립보드 이미지/글자(글자는 M1 카드 이미지로, 경로 붙여넣기 PNG 경로면 원본 복원). 마지막 캡처와 같은 이미지는 캡처한 자리에 핀.
   - `CGWindowListCreateImage`는 이 SDK(macOS 26)에서 **사용 불가**(컴파일 오류) → ScreenCaptureKit 필수.
   - 첫 캡처 때 맥이 "시스템 개인정보 보호 윈도우 선택기를 우회하여 화면에 직접 접근" 허용 창을 따로 띄운다(화면 기록 권한과 별개). 사용자가 허용함(2026-10-03). 다시 묻는 주기는 확인 필요.
@@ -47,6 +52,7 @@ scripts/build.sh --no-run  # 실행 없이 설치만
   - 2026-10-04 사용자 실조건검증: 요소 하이라이트·클릭 캡처 정상.
   - 2026-10-03 사용자 실조건검증: 창 클릭·자유 드래그 캡처, 패널·`⌃⌘V` 연동, 캡처 3장 순차 핀, 글자 핀 모두 정상.
 - OCR(`⌘⇧E`, `GatewayOCR` in Core + `ScreenController.recognize`): 캡처 오버레이를 OCR 모드로 재사용 → jbnu 게이트웨이(`/chat/completions`, 브라우저형 UA — Cloudflare 1010 회피, `max_tokens` 16384 — 생각 토큰 때문에 작으면 잘림) → 글자를 클립보드에 올려 감시기가 히스토리·큐에 넣음 → 성공 시 크레딧 캐시 갱신. 설정창 OCR 탭 `OCRSettingsPane`([저장] 버튼 — 키 입력이 있어서): 모델 콤보 + 새로고침(`/models` 전체, 거르지 않음 → DB `ocr_models_cache`), 연결 테스트(앱 안 한글 샘플, **폴백 없이** 고른 모델만), 크레딧(`/credits/` → DB `ocr_credits_text`).
+  - 얇은 이미지 함정: 1배 모니터의 한 줄 캡처(827×24px)는 같은 이미지·같은 모델에서도 6번 중 3번 "정 리 하 면"처럼 낱자 띄어쓰기로 나온다(무작위 — `temperature` 0으로도 2/6, 2배 확대도 효과 없음). 보내기 전에 `OCRImagePrep.padIfSmall`이 테두리 평균색 여백으로 최소 1800×400 캔버스에 둔다 → 0/6(쉼표 앞 빈칸 1/6은 남음, 원래 글자 간격이 넓은 터미널 글꼴). 2026-10-05 실측, 같은 날 사용자 실조건검증.
   - API 키: `SecretStore` 파일(`~/Library/Application Support/PasteFlow/secrets/ocr_api_key`, 600/700). **키체인 쓰지 말 것** — 팀 ID 없는 자체 서명 앱은 빌드마다 비밀번호 창이 뜸(추정: 키체인이 앱 지문 cdhash로 기억). 터미널 `security`로 읽어도 매번 창이 뜸.
   - **메뉴를 열 때 네트워크·비밀값을 건드리지 말 것** — 메뉴가 키보드를 잡고 있어 그때 뜬 시스템 창에 입력이 안 된다(실사례). 메뉴는 캐시 값만.
   - 키를 붙여넣으려고 복사하면 히스토리에 기록된다 → 저장 시 `ClipDatabase.deleteItems(withPlainText:)`로 같은 내용 삭제. 빈 클립보드는 기록 안 함(`ClipClassifier.isEmpty`).
@@ -69,7 +75,7 @@ scripts/build.sh --no-run  # 실행 없이 설치만
   - 2026-10-04 사용자 실조건검증: 복사 알림·Q 누적, 캡처 때 겹치지 않음, 설정으로 끄기 정상(칸을 합치기 전 기준 — 합친 칸은 화면만 확인).
 - 한 번만 실행: 이미 떠 있으면 새 쪽이 분산 알림으로 설정창을 열게 하고 끝남. Finder에서 다시 열기(`applicationShouldHandleReopen`)도 설정창.
 - 자체 시험 함정: 이 맥의 사용자는 Chrome 전체 화면을 자주 띄워 두므로, 자동 키 입력 시험 중 맨 앞 창이 바뀌어 주입한 ⌘V가 엉뚱한 앱으로 갈 수 있다. 실제 붙는 결과는 사용자 직접 확인이 확실하다.
-- 데이터: `~/Library/Application Support/PasteFlow/pasteflow.db` (히스토리 50개, 고정 제외).
+- 데이터: `~/Library/Application Support/PasteFlow/pasteflow.db` (히스토리 기본 50개, 고정 제외, 설정으로 10~500).
 - 알려진 한계: 클립보드에 항목이 여러 개면(Finder에서 파일 여러 개 복사 등) 첫 항목만 보존한다. 32MB 넘는 형식 하나는 건너뛴다.
 - 실행 기록: `~/Library/Logs/PasteFlow/status.log` — 복사마다 `copy id=… kind=… queue=p/total` 한 줄도 남는다. — 실행마다 권한 상태와 메뉴바 아이콘 위치를 남긴다. 2026-10-03 재빌드 3회 이상에서 두 권한 모두 유지 확인.
 

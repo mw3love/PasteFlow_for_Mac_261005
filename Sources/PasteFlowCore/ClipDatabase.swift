@@ -10,7 +10,9 @@ public final class ClipDatabase {
     public static let defaultHistoryMax = 50
 
     private var db: OpaquePointer?
-    private let historyMax: Int
+    /// 고정 제외 히스토리 최대 개수(설정 `history_max`, 윈도우판과 같은 키). 바꾸려면 `setHistoryMax`.
+    public private(set) var historyMax: Int
+    public static let historyMaxKey = "history_max"
     private let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
     public init(path: String, historyMax: Int = ClipDatabase.defaultHistoryMax) throws {
@@ -38,6 +40,18 @@ public final class ClipDatabase {
             );
             CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
             """)
+        try migrateHistoryOrder()
+    }
+
+    /// 히스토리 표시 순서 열(윈도우판 `history_order` — 작을수록 위). 옛 DB는 id 역순(최신 위)으로 채운다.
+    private func migrateHistoryOrder() throws {
+        var has = false
+        try step("PRAGMA table_info(clip_items)", []) { stmt in
+            if String(cString: sqlite3_column_text(stmt, 1)) == "history_order" { has = true }
+        }
+        guard !has else { return }
+        try exec("ALTER TABLE clip_items ADD COLUMN history_order INTEGER")
+        try exec("UPDATE clip_items SET history_order = -id")
     }
 
     deinit { sqlite3_close(db) }
@@ -49,8 +63,8 @@ public final class ClipDatabase {
         try exec("BEGIN")
         do {
             try run("""
-                INSERT INTO clip_items (kind, preview_text, thumbnail, created_at, is_pinned, pin_order, saved_image_path)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO clip_items (kind, preview_text, thumbnail, created_at, is_pinned, pin_order, saved_image_path, history_order)
+                VALUES (?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MIN(history_order), 0) - 1 FROM clip_items))
                 """, [item.kind.rawValue, item.previewText, item.thumbnail, item.createdAt.timeIntervalSince1970,
                       item.isPinned ? 1 : 0, item.pinOrder, item.savedImagePath])
             let id = sqlite3_last_insert_rowid(db)
@@ -70,9 +84,9 @@ public final class ClipDatabase {
         try query("SELECT * FROM clip_items WHERE id = ?", [id]).first
     }
 
-    /// 고정 안 된 히스토리, 최신 먼저. 패널 목록처럼 원본이 필요 없으면 `withFormats: false`(큰 이미지 원본을 안 읽음).
+    /// 고정 안 된 히스토리, 표시 순서대로(새 복사·맨 위로 올린 것이 먼저). 패널 목록처럼 원본이 필요 없으면 `withFormats: false`(큰 이미지 원본을 안 읽음).
     public func recent(limit: Int? = nil, withFormats: Bool = true) throws -> [ClipItem] {
-        try query("SELECT * FROM clip_items WHERE is_pinned = 0 ORDER BY id DESC LIMIT ?", [limit ?? historyMax], withFormats: withFormats)
+        try query("SELECT * FROM clip_items WHERE is_pinned = 0 ORDER BY history_order, id DESC LIMIT ?", [limit ?? historyMax], withFormats: withFormats)
     }
 
     /// 고정 항목, 고정한 순서대로.
@@ -96,6 +110,37 @@ public final class ClipDatabase {
             try run("UPDATE clip_items SET is_pinned = 0, pin_order = 0 WHERE id = ?", [id])
             try trimHistory()
         }
+    }
+
+    /// 히스토리 맨 위로(패널에서 옛 항목을 복사하면 "맨 위 = 지금 클립보드"를 지키려고 — 윈도우판 `bump_history_to_top`). 고정 항목은 그대로.
+    public func bumpToTop(id: Int64) throws {
+        try run("""
+            UPDATE clip_items SET history_order = (SELECT COALESCE(MIN(history_order), 0) - 1 FROM clip_items)
+            WHERE id = ? AND is_pinned = 0
+            """, [id])
+    }
+
+    /// 히스토리 표시 순서를 통째로 정한다(위에서부터). 끌어서 순서 바꾸기용.
+    public func setHistoryOrder(_ ids: [Int64]) throws {
+        try exec("BEGIN")
+        do {
+            // 지금 맨 위 값부터 아래로 이어 붙여, 이후 새 복사(MIN-1)가 여전히 맨 위로 오게 한다
+            var top: Int64 = 0
+            try step("SELECT COALESCE(MIN(history_order), 0) FROM clip_items", []) { top = sqlite3_column_int64($0, 0) }
+            for (i, id) in ids.enumerated() {
+                try run("UPDATE clip_items SET history_order = ? WHERE id = ? AND is_pinned = 0", [top + Int64(i), id])
+            }
+            try exec("COMMIT")
+        } catch {
+            try? exec("ROLLBACK")
+            throw error
+        }
+    }
+
+    /// 히스토리 최대 개수를 바꾸고 넘치는 오래된 항목을 바로 지운다.
+    public func setHistoryMax(_ n: Int) throws {
+        historyMax = max(1, n)
+        try trimHistory()
     }
 
     /// 고정 항목 순서를 통째로 정한다(앞에서부터 1, 2, 3…).
