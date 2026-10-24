@@ -28,7 +28,7 @@ scripts/build.sh --no-run  # 실행 없이 설치만
   - **주입한 ⌘V 구분**: 주입 이벤트의 `eventSourceUserData`에 표식(`KeyInterceptor.injectedMarker`)을 붙이고, 탭에서 표식 없는 ⌘V만 "사용자가 누른 일반 ⌘V"로 보고 큐를 비운다. 주입 ⌘V는 플래그를 ⌘만으로 고정해 사용자가 ⇧·⌥·⌃를 누르고 있어도 앱에는 ⌘V로 보인다.
   - 큐 비우기 공통 경로: 일반 ⌘V·HUD ✕·소진 완료 모두 `PasteController`에서 처리.
   - 2026-10-03 실조건검증(사용자가 TextEdit·터미널에서 직접): 순차 순서, 일반 ⌘V로 큐 비움, `⌃⌘V` 이미지 경로 모두 정상. Karabiner(선택 프로필에 재매핑 규칙 없음)와 충돌 없음.
-- 패널(`ClipPanel.swift`, AppKit — `⌥` 드래그 판정·키 처리를 직접 다루려고 SwiftUI 대신 선택): `⌥Space` 토글, 다른 앱을 활성화하지 않는 NSPanel이지만 키 입력은 받음(그래서 Enter 붙여넣기가 원래 앱으로 감). 키: ↑↓ 선택, Enter 붙여넣기(⌥Enter=경로), Space/더블클릭 미리보기, P 고정, C 큐 지정/해제, O 파일 위치 열기, ⌫ 삭제(큐 동기화), ⌘C 복사, Esc 닫기. 우클릭에 "수정"(글자 항목, `TextEditWindow` — ⌘Enter 저장, 닫으면 원래 앞 앱으로 돌려줌). 목록은 `withFormats: false`로 원본 없이 읽고, 필요할 때만 `db.item(id:)`.
+- 패널(`ClipPanel.swift`, AppKit — `⌥` 드래그 판정·키 처리를 직접 다루려고 SwiftUI 대신 선택): 패널 열기(기본 `⌘Space`) 토글, 다른 앱을 활성화하지 않는 NSPanel이지만 키 입력은 받음(그래서 Enter 붙여넣기가 원래 앱으로 감). 키: ↑↓ 선택, Enter 붙여넣기(⌥Enter=경로), Space/더블클릭 미리보기, P 고정, C 큐 지정/해제, O 파일 위치 열기, ⌫ 삭제(큐 동기화), ⌘C 복사, Esc 닫기. 우클릭에 "수정"(글자 항목, `TextEditWindow` — ⌘Enter 저장, 닫으면 원래 앞 앱으로 돌려줌). 목록은 `withFormats: false`로 원본 없이 읽고, 필요할 때만 `db.item(id:)`.
   - 함정 1: 목록을 다시 그린 직후 `scrollToVisible`을 부르면 배치 전 위치로 계산돼 맨 아래로 튄다 → `layoutSubtreeIfNeeded()` 후 스크롤, 다시 그릴 때 원래 스크롤 위치 복원.
   - 함정 2: `isMovableByWindowBackground` 창에서 글자 칸(NSTextField)을 누르면 창 이동으로 처리된다 → 항목 뷰가 `hitTest`로 클릭을 직접 받고 `mouseDownCanMoveWindow = false`.
   - 2026-10-03 사용자 실조건검증: 선택·고정·삭제·미리보기·Enter 붙여넣기·우클릭·끌어다 놓기(글자·이미지, ⌥ 경로) 모두 정상.
@@ -44,7 +44,7 @@ scripts/build.sh --no-run  # 실행 없이 설치만
   - 📌 = 윈도우판 "자동 닫기" 버튼: 켜짐 = 항상 위에·안 닫힘, 꺼짐 = 패널이 키를 잃으면 닫힘(미리보기·수정 창·핀으로 옮길 때, 확인 창, 다른 앱에 놓은 직후 `suppressAutoClose`는 예외). DB `panel_pinned`(기본 켜짐 — 윈도우판 코드 기본은 자동 닫기 켜짐이지만, 패널을 띄워 두고 쓰는 사용 방식이라 맥은 켜짐). 📌 꺼짐(일반 창 높이)에서도 단축키로 열면 `orderFrontRegardless`로 맨 앞.
   - 설정 일반 "히스토리 N개"(10~500, DB `history_max` — 윈도우판과 같은 키). 줄이면 넘치는 항목을 바로 지운다.
   - 2026-10-05 사용자 실조건검증: 우클릭 OCR·핀/미리보기 메뉴, 패널 복사, 히스토리 끌기·개수, 📌 자동 닫기, 📌 꺼짐에서 단축키로 맨 앞 표시 정상.
-- 캡처·핀(`ScreenController`): `⌘⇧2` → `ScreenSnapshot`(ScreenCaptureKit으로 모니터별 "얼린" 화면 + `CGWindowListCopyWindowInfo` 창 사각형·앱 pid, 실측 44~122ms) → `CaptureOverlay`(모니터마다 NSPanel, 요소·창 하이라이트 클릭 / 4pt 이상 끌면 자유 사각형 / 우클릭·Esc 취소 / Space 실제 커서 포함) → PNG(144dpi 기록)를 클립보드에 올려 **감시기가 일반 복사처럼** 히스토리·큐에 넣게 하고, `~/Pictures/PasteFlow/clip_YYYYMMDD_HHMMSS.png` 저장(설정 키 `capture_save_folder`로 바꿀 수 있음). 알림은 복사 알림(Q배지+썸네일), 저장 실패만 따로. `⌘⇧1` → 큐에 다음이 있으면 그것(포인터 공유), 없으면 클립보드 이미지/글자(글자는 M1 카드 이미지로, 경로 붙여넣기 PNG 경로면 원본 복원). 마지막 캡처와 같은 이미지는 캡처한 자리에 핀.
+- 캡처·핀(`ScreenController`): 영역 캡처(기본 `⌘F2`) → `ScreenSnapshot`(ScreenCaptureKit으로 모니터별 "얼린" 화면 + `CGWindowListCopyWindowInfo` 창 사각형·앱 pid, 실측 44~122ms) → `CaptureOverlay`(모니터마다 NSPanel, 요소·창 하이라이트 클릭 / 4pt 이상 끌면 자유 사각형 / 우클릭·Esc 취소 / Space 실제 커서 포함) → PNG(144dpi 기록)를 클립보드에 올려 **감시기가 일반 복사처럼** 히스토리·큐에 넣게 하고, `~/Pictures/PasteFlow/clip_YYYYMMDD_HHMMSS.png` 저장(설정 키 `capture_save_folder`로 바꿀 수 있음). 알림은 복사 알림(Q배지+썸네일), 저장 실패만 따로. 화면 핀(기본 `⌘F3`) → 큐에 다음이 있으면 그것(포인터 공유), 없으면 클립보드 이미지/글자(글자는 M1 카드 이미지로, 경로 붙여넣기 PNG 경로면 원본 복원). 마지막 캡처와 같은 이미지는 캡처한 자리에 핀.
   - `CGWindowListCreateImage`는 이 SDK(macOS 26)에서 **사용 불가**(컴파일 오류) → ScreenCaptureKit 필수.
   - 첫 캡처 때 맥이 "시스템 개인정보 보호 윈도우 선택기를 우회하여 화면에 직접 접근" 허용 창을 따로 띄운다(화면 기록 권한과 별개). 사용자가 허용함(2026-10-03). 다시 묻는 주기는 확인 필요.
   - 한계: 자유 드래그 선택은 시작한 모니터 안으로 한정(여러 모니터 걸침 합성 없음).
@@ -52,7 +52,7 @@ scripts/build.sh --no-run  # 실행 없이 설치만
   - 크롬 계열은 웹페이지 안 접근성 정보를 꺼 둔다 → 앱 시작·새 앱 실행 3초 뒤 `AXEnhancedUserInterface`를 설정해 깨운다(실측: 오류 -25208을 돌려주지만 약 1.5초 뒤 켜지고 유지. `AXManualAccessibility`는 크롬이 거부 -25205). 일렉트론은 `AXManualAccessibility`(미측정 — VS Code를 뒤에서 열면 창이 안 떠서 못 잼). 다른 앱은 건드리지 않음. 크롬 성능 영향은 확인 필요.
   - 2026-10-04 사용자 실조건검증: 요소 하이라이트·클릭 캡처 정상.
   - 2026-10-03 사용자 실조건검증: 창 클릭·자유 드래그 캡처, 패널·`⌃⌘V` 연동, 캡처 3장 순차 핀, 글자 핀 모두 정상.
-- OCR(`⌘⇧E`, `GatewayOCR` in Core + `ScreenController.recognize`): 캡처 오버레이를 OCR 모드로 재사용 → jbnu 게이트웨이(`/chat/completions`, 브라우저형 UA — Cloudflare 1010 회피, `max_tokens` 16384 — 생각 토큰 때문에 작으면 잘림) → 글자를 클립보드에 올려 감시기가 히스토리·큐에 넣음 → 성공 시 크레딧 캐시 갱신. 설정창 OCR 탭 `OCRSettingsPane`([저장] 버튼 — 키 입력이 있어서): 모델 콤보 + 새로고침(`/models` 전체, 거르지 않음 → DB `ocr_models_cache`), 연결 테스트(앱 안 한글 샘플, **폴백 없이** 고른 모델만), 크레딧(`/credits/` → DB `ocr_credits_text`).
+- OCR(기본 `⌘F1`, `GatewayOCR` in Core + `ScreenController.recognize`): 캡처 오버레이를 OCR 모드로 재사용 → jbnu 게이트웨이(`/chat/completions`, 브라우저형 UA — Cloudflare 1010 회피, `max_tokens` 16384 — 생각 토큰 때문에 작으면 잘림) → 글자를 클립보드에 올려 감시기가 히스토리·큐에 넣음 → 성공 시 크레딧 캐시 갱신. 설정창 OCR 탭 `OCRSettingsPane`([저장] 버튼 — 키 입력이 있어서): 모델 콤보 + 새로고침(`/models` 전체, 거르지 않음 → DB `ocr_models_cache`), 연결 테스트(앱 안 한글 샘플, **폴백 없이** 고른 모델만), 크레딧(`/credits/` → DB `ocr_credits_text`).
   - 얇은 이미지 함정: 1배 모니터의 한 줄 캡처(827×24px)는 같은 이미지·같은 모델에서도 6번 중 3번 "정 리 하 면"처럼 낱자 띄어쓰기로 나온다(무작위 — `temperature` 0으로도 2/6, 2배 확대도 효과 없음). 보내기 전에 `OCRImagePrep.padIfSmall`이 테두리 평균색 여백으로 최소 1800×400 캔버스에 둔다 → 0/6(쉼표 앞 빈칸 1/6은 남음, 원래 글자 간격이 넓은 터미널 글꼴). 2026-10-05 실측, 같은 날 사용자 실조건검증.
   - API 키: `SecretStore` 파일(`~/Library/Application Support/PasteFlow/secrets/ocr_api_key`, 600/700). **키체인 쓰지 말 것** — 팀 ID 없는 자체 서명 앱은 빌드마다 비밀번호 창이 뜸(추정: 키체인이 앱 지문 cdhash로 기억). 터미널 `security`로 읽어도 매번 창이 뜸.
   - **메뉴를 열 때 네트워크·비밀값을 건드리지 말 것** — 메뉴가 키보드를 잡고 있어 그때 뜬 시스템 창에 입력이 안 된다(실사례). 메뉴는 캐시 값만.
@@ -67,7 +67,7 @@ scripts/build.sh --no-run  # 실행 없이 설치만
   - 복사 = 원본 픽셀 해상도로 다시 그린 PNG를 클립보드에 → 감시기가 히스토리·큐에 넣음(캡처와 같은 경로). 주석은 핀에 벡터로 남아 다시 편집 가능.
   - 2026-10-03 프록시검증(자동 입력): 8도구 그리기·번호 자동 증가·글자·복사(800×600 결과, 히스토리 기록)·되돌리기. 같은 날 사용자 실조건검증: 캡처→핀→편집→복사→다른 앱 붙여넣기, 끌기·손잡이, 한글 글자 입력 모두 정상.
 - 설정창(`SettingsWindow`, 메뉴바 "설정…"·패널 빈 곳 우클릭·실행 중인 앱을 다시 열 때): 탭 일반 / 단축키 / OCR. 일반·단축키는 바꾸는 즉시 저장·적용.
-  - 단축키: Core `HotkeyMap`(기본값 위에 바꾼 것만 DB `hotkeys` JSON) → `KeyInterceptor.map`을 갈아 끼워 재시작 없이 적용. 일반 `⌘V`는 큐 비우기 신호라 `Hotkeys.isPlainPaste`로 고정. 검사: ⌘·⌃·⌥ 하나는 필수, 예약 키(⌘V/C/X/Z/A/Q/W, ⌘Tab, ⌘Space, ⌃Space, ⌘⇧3/4/5) 거부, 다른 동작과 중복 거부, 알려진 겹침은 경고만. 녹화 중엔 `KeyInterceptor.isRecording`으로 전역 단축키가 키를 삼키지 않게 한다.
+  - 단축키: Core `HotkeyMap`(기본값 위에 바꾼 것만 DB `hotkeys` JSON) → `KeyInterceptor.map`을 갈아 끼워 재시작 없이 적용. 일반 `⌘V`는 큐 비우기 신호라 `Hotkeys.isPlainPaste`로 고정. 검사: ⌘·⌃·⌥ 하나는 필수, 예약 키(⌘V/C/X/Z/A/Q/W, ⌘Tab, ⌃Space, ⌘⇧3/4/5) 거부 — ⌘Space는 이 맥에서 Spotlight를 ⌥Space로 옮겨 2026-10-24 예약에서 뺌, 다른 동작과 중복 거부, 알려진 겹침은 경고만. 녹화 중엔 `KeyInterceptor.isRecording`으로 전역 단축키가 키를 삼키지 않게 한다. 되돌리기는 맨 아래 "모두 기본값으로" 버튼 하나(2026-10-24 사용자 결정 — 줄마다 있던 버튼 8개를 합침, 한 줄만 바꾸려면 그 칸에서 새 키를 다시 누름).
   - 일반: 자동 시작(`SMAppService.mainApp` — 한 번도 등록 안 한 상태도 `.notFound`로 나옴), 큐 새 묶음 시간(DB `queue_idle_reset_sec`), 캡처 저장 폴더(`capture_save_folder`), 알림 켜기/끄기(`toast_enabled` — 복사 알림과 확인 알림을 한 칸으로, 2026-10-04 사용자 결정).
   - 2026-10-03: 사용자 실조건검증 — 단축키를 바꾸면 재시작 없이 새 키로 동작. 자동 시작은 자체 서명 앱에서도 등록 성공(status=enabled), 실제 로그인 후 실행은 미확인(맥을 거의 안 꺼서 나중에 — 안 켜지면 그때 수정).
   - macOS 14+는 활성화가 양보식이라 `NSApp.activate`만으로는 설정창이 다른 앱 창 뒤에 남는다 → `orderFrontRegardless()`.

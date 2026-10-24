@@ -3,17 +3,17 @@ import Foundation
 /// 붙여넣기 계열 동작.
 public enum PasteAction: Equatable {
     case sequential       // ⌘⇧V
-    case sequentialAll    // ⌥⌘⇧V
-    case path             // ⌃⌘V
-    case pathAll          // ⌃⌥⌘V
+    case sequentialAll    // ⇧⌘B
+    case path             // ⇧⌘P
+    case pathAll          // ⇧⌘[
     case plainPaste       // ⌘V — 가로채지 않고 큐만 비운다(바꿀 수 없음)
 }
 
 /// 화면 계열 동작.
 public enum ScreenAction: Equatable {
-    case capture   // ⌘⇧2 영역 캡처
-    case pin       // ⌘⇧1 화면 핀
-    case ocr       // ⌘⇧E 화면 OCR
+    case capture   // ⌘F2 영역 캡처
+    case pin       // ⌘F3 화면 핀
+    case ocr       // ⌘F1 화면 OCR
 }
 
 public struct Modifiers: OptionSet, Hashable, Codable {
@@ -99,13 +99,13 @@ public struct HotkeyMap: Equatable {
 
     public static let defaults: [HotkeyAction: Hotkey] = [
         .sequential: Hotkey(9, [.command, .shift]),
-        .sequentialAll: Hotkey(9, [.command, .shift, .option]),
-        .path: Hotkey(9, [.command, .control]),
-        .pathAll: Hotkey(9, [.command, .control, .option]),
-        .panel: Hotkey(49, [.option]),
-        .capture: Hotkey(19, [.command, .shift]),
-        .pin: Hotkey(18, [.command, .shift]),
-        .ocr: Hotkey(14, [.command, .shift]),
+        .sequentialAll: Hotkey(11, [.command, .shift]),
+        .path: Hotkey(35, [.command, .shift]),
+        .pathAll: Hotkey(33, [.command, .shift]),
+        .panel: Hotkey(49, [.command]),
+        .capture: Hotkey(120, [.command]),
+        .pin: Hotkey(99, [.command]),
+        .ocr: Hotkey(122, [.command]),
     ]
 
     private var custom: [HotkeyAction: Hotkey] = [:]
@@ -154,7 +154,6 @@ public struct HotkeyMap: Equatable {
         Hotkey(12, [.command]): "앱 종료(⌘Q)",
         Hotkey(13, [.command]): "창 닫기(⌘W)",
         Hotkey(48, [.command]): "앱 전환(⌘Tab)",
-        Hotkey(49, [.command]): "Spotlight(⌘Space)",
         Hotkey(49, [.control]): "한/영 전환(⌃Space)",
         Hotkey(20, [.command, .shift]): "맥 스크린샷(⌘⇧3)",
         Hotkey(21, [.command, .shift]): "맥 스크린샷(⌘⇧4)",

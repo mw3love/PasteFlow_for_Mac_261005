@@ -7,13 +7,13 @@ final class HotkeysTests: XCTestCase {
     func testDefaultsMatchPlan() {
         let v = Hotkeys.keyV
         XCTAssertEqual(map.action(keyCode: v, modifiers: [.command, .shift]), .sequential)
-        XCTAssertEqual(map.action(keyCode: v, modifiers: [.command, .shift, .option]), .sequentialAll)
-        XCTAssertEqual(map.action(keyCode: v, modifiers: [.command, .control]), .path)
-        XCTAssertEqual(map.action(keyCode: v, modifiers: [.command, .control, .option]), .pathAll)
-        XCTAssertEqual(map.action(keyCode: 49, modifiers: [.option]), .panel)
-        XCTAssertEqual(map.action(keyCode: 19, modifiers: [.command, .shift]), .capture)
-        XCTAssertEqual(map.action(keyCode: 18, modifiers: [.command, .shift]), .pin)
-        XCTAssertEqual(map.action(keyCode: 14, modifiers: [.command, .shift]), .ocr)
+        XCTAssertEqual(map.action(keyCode: 11, modifiers: [.command, .shift]), .sequentialAll)
+        XCTAssertEqual(map.action(keyCode: 35, modifiers: [.command, .shift]), .path)
+        XCTAssertEqual(map.action(keyCode: 33, modifiers: [.command, .shift]), .pathAll)
+        XCTAssertEqual(map.action(keyCode: 49, modifiers: [.command]), .panel)
+        XCTAssertEqual(map.action(keyCode: 120, modifiers: [.command]), .capture)
+        XCTAssertEqual(map.action(keyCode: 99, modifiers: [.command]), .pin)
+        XCTAssertEqual(map.action(keyCode: 122, modifiers: [.command]), .ocr)
         XCTAssertEqual(HotkeyAction.sequentialAll.pasteAction, .sequentialAll)
         XCTAssertEqual(HotkeyAction.ocr.screenAction, .ocr)
         XCTAssertNil(HotkeyAction.panel.pasteAction)
@@ -30,7 +30,7 @@ final class HotkeysTests: XCTestCase {
         XCTAssertNil(map.action(keyCode: Hotkeys.keyV, modifiers: [.command, .option]))  // Finder "이동" 붙여넣기
         XCTAssertNil(map.action(keyCode: 8, modifiers: [.command, .shift]))              // ⌘⇧C
         XCTAssertNil(map.action(keyCode: 20, modifiers: [.command, .shift]))             // ⌘⇧3 = 맥 스크린샷
-        XCTAssertNil(map.action(keyCode: 49, modifiers: [.command]))                     // Spotlight
+        XCTAssertNil(map.action(keyCode: 49, modifiers: [.option]))                      // Spotlight(이 맥에서 바꾼 키)
         XCTAssertNil(map.action(keyCode: 49, modifiers: [.option, .shift]))
     }
 
@@ -38,11 +38,11 @@ final class HotkeysTests: XCTestCase {
         var m = HotkeyMap()
         m.set(Hotkey(15, [.command, .option]), for: .capture)     // ⌥⌘R
         XCTAssertEqual(m.action(keyCode: 15, modifiers: [.command, .option]), .capture)
-        XCTAssertNil(m.action(keyCode: 19, modifiers: [.command, .shift]))
+        XCTAssertNil(m.action(keyCode: 120, modifiers: [.command]))
         XCTAssertFalse(m.isDefault(.capture))
         m.set(nil, for: .capture)
         XCTAssertTrue(m.isDefault(.capture))
-        XCTAssertEqual(m.action(keyCode: 19, modifiers: [.command, .shift]), .capture)
+        XCTAssertEqual(m.action(keyCode: 120, modifiers: [.command]), .capture)
     }
 
     func testJSONRoundTripKeepsOnlyChanges() {
@@ -61,8 +61,9 @@ final class HotkeysTests: XCTestCase {
         XCTAssertEqual(map.problem(Hotkey(0, [.shift]), for: .pin), .needsModifier)
         if case .reserved = map.problem(Hotkey(9, [.command]), for: .pin) {} else { XCTFail("⌘V는 예약") }
         if case .reserved = map.problem(Hotkey(49, [.control]), for: .panel) {} else { XCTFail("⌃Space는 한/영") }
-        XCTAssertEqual(map.problem(Hotkey(19, [.command, .shift]), for: .pin), .duplicate(.capture))
-        XCTAssertNil(map.problem(Hotkey(18, [.command, .shift]), for: .pin))   // 자기 키는 그대로 둬도 됨
+        XCTAssertNil(map.problem(Hotkey(49, [.command]), for: .panel))        // Spotlight를 ⌥Space로 옮겨 풀림
+        XCTAssertEqual(map.problem(Hotkey(120, [.command]), for: .pin), .duplicate(.capture))
+        XCTAssertNil(map.problem(Hotkey(99, [.command]), for: .pin))   // 자기 키는 그대로 둬도 됨
         XCTAssertNil(map.problem(Hotkey(15, [.command, .option]), for: .pin))
         XCTAssertNotNil(HotkeyMap.warning(Hotkey(1, [.command, .shift])))     // ⌘⇧S
         XCTAssertNil(HotkeyMap.warning(Hotkey(15, [.command, .option])))

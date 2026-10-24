@@ -270,18 +270,18 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate {
             rec.tag = HotkeyAction.allCases.firstIndex(of: a)!
             rec.bezelStyle = .rounded
             rec.widthAnchor.constraint(equalToConstant: 150).isActive = true
-            let reset = NSButton(title: "기본값", target: self, action: #selector(resetClicked(_:)))
-            reset.tag = rec.tag
-            reset.bezelStyle = .rounded
             let note = small(NSTextField(labelWithString: ""))
             note.lineBreakMode = .byTruncatingTail
             note.widthAnchor.constraint(equalToConstant: 210).isActive = true
             recorders[a] = rec
             notes[a] = note
-            rows.append([label(a.title), rec, reset, note])
+            rows.append([label(a.title), rec, note])
         }
         rows.append([NSGridCell.emptyContentView, small(NSTextField(labelWithString: "일반 ⌘V(큐 비우기)는 바꿀 수 없어요")),
-                     NSGridCell.emptyContentView, NSGridCell.emptyContentView])
+                     NSGridCell.emptyContentView])
+        let resetAll = NSButton(title: "모두 기본값으로", target: self, action: #selector(resetAllClicked))
+        resetAll.bezelStyle = .rounded
+        rows.append([NSGridCell.emptyContentView, resetAll, NSGridCell.emptyContentView])
         let grid = NSGridView(views: rows)
         grid.rowSpacing = 6
         grid.column(at: 0).xPlacement = .trailing
@@ -347,17 +347,10 @@ final class SettingsWindow: NSWindowController, NSWindowDelegate {
         StatusLog.append("hotkey \(a.rawValue) = \(k.display)")
     }
 
-    @objc private func resetClicked(_ sender: NSButton) {
-        guard var map = Self.keys?.map else { return }
-        let a = HotkeyAction.allCases[sender.tag]
-        // 기본값이 지금 다른 동작에 걸려 있으면 되돌릴 수 없다
-        if case .duplicate(let other)? = map.problem(HotkeyMap.defaults[a]!, for: a) {
-            refreshHotkeys(error: (a, "기본값을 \"\(other.title)\"가 쓰고 있어요"))
-            return
-        }
+    @objc private func resetAllClicked() {
         stopRecording()
-        map.set(nil, for: a)
-        apply(map)
+        apply(HotkeyMap())
+        StatusLog.append("hotkey reset all")
     }
 
     private func apply(_ map: HotkeyMap) {
