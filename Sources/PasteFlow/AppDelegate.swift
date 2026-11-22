@@ -51,6 +51,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         startClipboard()
         startPaste()
+        installEditShortcuts()
+    }
+
+    // 메뉴바 전용 앱이라 편집 메뉴가 없어 글자 칸에서 ⌘V·⌘C 등이 안 먹는다.
+    // 편집 메뉴를 달면 주석 편집기·핀의 ⌘C·⌘Z를 메뉴가 먼저 가져가므로,
+    // 커서가 글자 칸(NSTextView — 설정 입력칸의 편집기 포함)에 있을 때만 직접 보낸다.
+    private var editMonitor: Any?
+    private func installEditShortcuts() {
+        editMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            guard NSApp.keyWindow?.firstResponder is NSTextView else { return event }
+            let mods = event.modifierFlags.intersection([.command, .shift, .option, .control])
+            // 한글 입력 중에도 되도록 문자 대신 키 코드로 판정
+            let action: String?
+            switch (event.keyCode, mods) {
+            case (9, [.command]): action = "paste:"
+            case (8, [.command]): action = "copy:"
+            case (7, [.command]): action = "cut:"
+            case (0, [.command]): action = "selectAll:"
+            case (6, [.command]): action = "undo:"
+            case (6, [.command, .shift]): action = "redo:"
+            default: action = nil
+            }
+            guard let action, NSApp.sendAction(Selector(action), to: nil, from: nil) else { return event }
+            return nil
+        }
     }
 
     // 붙여넣기 단축키 → 큐에서 꺼내 주입 + 진행 HUD
